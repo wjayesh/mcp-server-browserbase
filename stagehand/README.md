@@ -1,7 +1,6 @@
 # Stagehand MCP Server
 
-// TODO - ADD a nice and eye-watering COVER IMAGE
-<!-- ![cover](../assets/browserbase-mcp.png) -->
+![cover](../assets/stagehand-mcp.png)
 
 A Model Context Protocol (MCP) server that provides AI-powered web automation capabilities using [Stagehand](https://github.com/browserbase/stagehand). This server enables LLMs to interact with web pages, perform actions, extract data, and observe possible actions in a real browser environment.
 
