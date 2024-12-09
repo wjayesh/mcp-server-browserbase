@@ -11,8 +11,8 @@ import {
 
 import { Stagehand } from "@browserbasehq/stagehand";
 
-import { AnyZodObject } from 'zod';
-import { jsonSchemaToZod } from './utils.js';
+import { AnyZodObject } from "zod";
+import { jsonSchemaToZod } from "./utils.js";
 
 // Define the Stagehand tools
 const TOOLS: Tool[] = [
@@ -22,10 +22,10 @@ const TOOLS: Tool[] = [
     inputSchema: {
       type: "object",
       properties: {
-        url: { type: "string", description: "The URL to navigate to" }
+        url: { type: "string", description: "The URL to navigate to" },
       },
-      required: ["url"]
-    }
+      required: ["url"],
+    },
   },
   {
     name: "stagehand_act",
@@ -45,10 +45,10 @@ const TOOLS: Tool[] = [
   },
   {
     name: "stagehand_extract",
-    description: `
-  Extracts structured data from the web page based on an instruction and a JSON schema.
-  
-  **Instructions for providing the schema:**
+    description: `Extracts structured data from the web page based on an instruction and a JSON schema.`,
+    inputSchema: {
+      type: "object",
+      description: `**Instructions for providing the schema:**
   
   - The \`schema\` should be a valid JSON Schema object that defines the structure of the data to extract.
   - Use standard JSON Schema syntax.
@@ -121,18 +121,17 @@ const TOOLS: Tool[] = [
   - Ensure the schema is valid JSON.
   - Use standard JSON Schema types like \`string\`, \`number\`, \`array\`, \`object\`, etc.
   - You can add descriptions to help clarify the expected data.
-  
   `,
-    inputSchema: {
-      type: "object",
       properties: {
-        instruction: { 
-          type: "string", 
-          description: "Clear instruction for what data to extract from the page" 
+        instruction: {
+          type: "string",
+          description:
+            "Clear instruction for what data to extract from the page",
         },
         schema: {
           type: "object",
-          description: "A JSON Schema object defining the structure of data to extract",
+          description:
+            "A JSON Schema object defining the structure of data to extract",
           additionalProperties: true,
         },
       },
@@ -154,7 +153,6 @@ const TOOLS: Tool[] = [
   },
 ];
 
-
 // Global state
 let stagehand: Stagehand | undefined;
 const consoleLogs: string[] = [];
@@ -169,7 +167,6 @@ function log(message: string) {
 // Ensure Stagehand is initialized
 async function ensureStagehand() {
   log("Ensuring Stagehand is initialized...");
-  
   if (!stagehand) {
     log("Initializing Stagehand...");
     stagehand = new Stagehand({
@@ -177,6 +174,7 @@ async function ensureStagehand() {
       headless: true,
       verbose: 2,
       debugDom: true,
+      modelName: "claude-3-5-sonnet-20241022",
     });
     log("Running init()");
     await stagehand.init();
@@ -201,13 +199,13 @@ async function handleToolCall(
       toolResult: {
         content: [
           {
-            type: "text", 
+            type: "text",
             text: `Failed to initialize Stagehand: ${errorMsg}`,
           },
           {
             type: "text",
             text: `Operation logs:\n${operationLogs.join("\n")}`,
-          }
+          },
         ],
         isError: true,
       },
@@ -244,7 +242,7 @@ async function handleToolCall(
               {
                 type: "text",
                 text: `Operation logs:\n${operationLogs.join("\n")}`,
-              }
+              },
             ],
             isError: true,
           },
@@ -283,65 +281,67 @@ async function handleToolCall(
               {
                 type: "text",
                 text: `Operation logs:\n${operationLogs.join("\n")}`,
-              }
+              },
             ],
             isError: true,
           },
         };
       }
 
-      case "stagehand_extract":
-        try {
-          log(`Extracting data with instruction: ${args.instruction}`);
-          log(`Schema: ${JSON.stringify(args.schema)}`);
-          // Convert the JSON schema from args.schema to a zod schema
-          const zodSchema = jsonSchemaToZod(args.schema) as AnyZodObject;
-          const data = await stagehand.extract({
-            instruction: args.instruction,
-            schema: zodSchema,
-          });
-          log(`Data extracted successfully: ${JSON.stringify(data)}`);
-          return {
-            toolResult: {
-              content: [
-                {
-                  type: "text",
-                  text: `Extraction result: ${JSON.stringify(data)}`,
-                },
-                {
-                  type: "text",
-                  text: `Operation logs:\n${operationLogs.join("\n")}`,
-                }
-              ],
-              isError: false,
-            },
-          };
-        } catch (error) {
-          const errorMsg = error instanceof Error ? error.message : String(error);
-          log(`Extraction failed: ${errorMsg}`);
-          return {
-            toolResult: {
-              content: [
-                {
-                  type: "text",
-                  text: `Failed to extract: ${errorMsg}`,
-                },
-                {
-                  type: "text",
-                  text: `Operation logs:\n${operationLogs.join("\n")}`,
-                }
-              ],
-              isError: true,
-            },
-          };
-        }
+    case "stagehand_extract":
+      try {
+        log(`Extracting data with instruction: ${args.instruction}`);
+        log(`Schema: ${JSON.stringify(args.schema)}`);
+        // Convert the JSON schema from args.schema to a zod schema
+        const zodSchema = jsonSchemaToZod(args.schema) as AnyZodObject;
+        const data = await stagehand.extract({
+          instruction: args.instruction,
+          schema: zodSchema,
+        });
+        log(`Data extracted successfully: ${JSON.stringify(data)}`);
+        return {
+          toolResult: {
+            content: [
+              {
+                type: "text",
+                text: `Extraction result: ${JSON.stringify(data)}`,
+              },
+              {
+                type: "text",
+                text: `Operation logs:\n${operationLogs.join("\n")}`,
+              },
+            ],
+            isError: false,
+          },
+        };
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        log(`Extraction failed: ${errorMsg}`);
+        return {
+          toolResult: {
+            content: [
+              {
+                type: "text",
+                text: `Failed to extract: ${errorMsg}`,
+              },
+              {
+                type: "text",
+                text: `Operation logs:\n${operationLogs.join("\n")}`,
+              },
+            ],
+            isError: true,
+          },
+        };
+      }
     case "stagehand_observe":
       try {
         log(`Starting observation with instruction: ${args.instruction}`);
         const observations = await stagehand.observe({
           instruction: args.instruction,
         });
-        log(`Observation completed successfully: ${JSON.stringify(observations)}`);
+        log(
+          `Observation completed successfully: ${JSON.stringify(observations)}`
+        );
         return {
           toolResult: {
             content: [
@@ -366,7 +366,7 @@ async function handleToolCall(
               {
                 type: "text",
                 text: `Operation logs:\n${operationLogs.join("\n")}`,
-              }
+              },
             ],
             isError: true,
           },
@@ -385,7 +385,7 @@ async function handleToolCall(
             {
               type: "text",
               text: `Operation logs:\n${operationLogs.join("\n")}`,
-            }
+            },
           ],
           isError: true,
         },
@@ -407,7 +407,6 @@ const server = new Server(
   }
 );
 
-
 // Setup request handlers
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   log("Listing available tools");
@@ -417,7 +416,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   log(`Received tool call request for: ${request.params.name}`);
   operationLogs.length = 0; // Clear logs for new operation
-  const result = await handleToolCall(request.params.name, request.params.arguments ?? {});
+  const result = await handleToolCall(
+    request.params.name,
+    request.params.arguments ?? {}
+  );
   log("Tool call completed");
   return result;
 });
@@ -431,6 +433,8 @@ async function runServer() {
 }
 
 runServer().catch((error) => {
-  log(`Server error: ${error instanceof Error ? error.message : String(error)}`);
+  log(
+    `Server error: ${error instanceof Error ? error.message : String(error)}`
+  );
   console.error(error);
 });
