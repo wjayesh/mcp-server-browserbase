@@ -6,6 +6,8 @@
 
 This server provides cloud browser automation capabilities using [Browserbase](https://www.browserbase.com/), [Puppeteer](https://pptr.dev/), and [Stagehand](https://github.com/browserbase/stagehand) (Coming Soon). This server enables LLMs to interact with web pages, take screenshots, and execute JavaScript in a cloud browser environment.
 
+To learn to get started with Browserbase, check out ['browserbase/README.md'](./browserbase/README.md) or [Stagehand MCP](./stagehand/README.md).
+
 ## Getting Started with available MCPs
 
 🌐 **Browserbase MCP** - Located in [`browserbase/`](./browserbase/)
@@ -19,15 +21,7 @@ This server provides cloud browser automation capabilities using [Browserbase](h
 | JavaScript | Execute custom JS in the browser context |
 | Web Interaction | Navigate, click, and fill forms with ease |
 
-### Installing
-
-To install the Browserbase MCP server for Claude Desktop automatically via [Smithery](https://smithery.ai/protocol/@browserbasehq/mcp-browserbase):
-
-```bash
-npx @smithery/cli install @browserbasehq/mcp-browserbase --client claude
-```
-
-🤘 **Stagehand MCP** - Located in [`stagehand/`](./stagehand/) *(Coming Soon)*
+🤘 **Stagehand MCP** - Located in [`stagehand/`](./stagehand/) 
 
 | Feature | Description |
 |---------|-------------|
@@ -37,10 +31,6 @@ npx @smithery/cli install @browserbasehq/mcp-browserbase --client claude
 | Vision Support | Use annotated screenshots for complex DOMs |
 | Open Source | Contribute to the project and join the [Slack community](https://join.slack.com/t/stagehand-dev/shared_invite/zt-2uvuobu50-~wVSx2Si75CPa3332hwVEw) for support |
 
-### Installing
+### Alternative Installation Methods
 
-To install the Stagehand MCP server for Claude Desktop automatically via [Smithery](https://smithery.ai/protocol/@browserbasehq/mcp-stagehand):
-
-```bash
-npx @smithery/cli install @browserbasehq/mcp-stagehand --client claude
-```
+[Smithery](https://smithery.ai/protocol/@browserbasehq)
