@@ -188,7 +188,7 @@ const TOOLS: Tool[] = [
 async function handleToolCall(
   name: string,
   args: any
-): Promise<{ toolResult: CallToolResult }> {
+): Promise<CallToolResult> {
   // Only auto-create sessions for tools OTHER than create_session
   const defaultSession = !["browserbase_create_session"].includes(name)
     ? browsers.get(args.sessionId) ||
@@ -200,65 +200,55 @@ async function handleToolCall(
       await defaultSession!.browser.close();
       browsers.delete(args.sessionId);
       return {
-        toolResult: {
           content: [{ type: "text", text: "Closed session" }],
-        },
       };
     case "browserbase_create_session":
       try {
         // Check if session already exists
         if (browsers.has(args.sessionId)) {
           return {
-            toolResult: {
-              content: [
-                {
-                  type: "text",
-                  text: "Session already exists",
-                },
-              ],
-              isError: false,
-            },
+            content: [
+              {
+                type: "text",
+                text: "Session already exists",
+              },
+            ],
+            isError: false,
           };
         }
         await createNewBrowserSession(args.sessionId);
         return {
-          toolResult: {
-            content: [
-              {
-                type: "text",
-                text: "Created new browser session",
-              },
-            ],
-            isError: false,
-          },
+          content: [
+            {
+              type: "text",
+              text: "Created new browser session",
+            },
+          ],
+          isError: false,
         };
       } catch (error) {
         return {
-          toolResult: {
-            content: [
-              {
-                type: "text",
-                text: `Failed to create browser session: ${
-                  (error as Error).message
-                }`,
-              },
-            ],
-            isError: true,
-          },
+          content: [
+            {
+              type: "text",
+              text: `Failed to create browser session: ${
+                (error as Error).message
+              }`,
+            },
+          ],
+          isError: true,
         };
       }
     case "browserbase_navigate":
       await defaultSession!.page.goto(args.url);
       return {
-        toolResult: {
-          content: [
-            {
-              type: "text",
-              text: `Navigated to ${args.url}`,
-            },
-          ],
-          isError: false,
-        },
+        content: [
+          {
+            type: "text",
+            text: `Navigated to ${args.url}`,
+          },
+        ],
+        isError: false,
       };
 
     case "browserbase_screenshot": {
@@ -277,17 +267,15 @@ async function handleToolCall(
 
       if (!screenshot) {
         return {
-          toolResult: {
-            content: [
-              {
-                type: "text",
-                text: args.selector
-                  ? `Element not found: ${args.selector}`
-                  : "Screenshot failed",
-              },
-            ],
-            isError: true,
-          },
+          content: [
+            {
+              type: "text",
+              text: args.selector
+                ? `Element not found: ${args.selector}`
+                : "Screenshot failed",
+            },
+          ],
+          isError: true,
         };
       }
 
@@ -297,20 +285,18 @@ async function handleToolCall(
       });
 
       return {
-        toolResult: {
-          content: [
-            {
-              type: "text",
-              text: `Screenshot '${args.name}' taken at ${width}x${height}`,
-            } as TextContent,
-            {
-              type: "image",
-              data: screenshot,
-              mimeType: "image/png",
-            } as ImageContent,
-          ],
-          isError: false,
-        },
+        content: [
+          {
+            type: "text",
+            text: `Screenshot '${args.name}' taken at ${width}x${height}`,
+          } as TextContent,
+          {
+            type: "image",
+            data: screenshot,
+            mimeType: "image/png",
+          } as ImageContent,
+        ],
+        isError: false,
       };
     }
 
@@ -318,29 +304,25 @@ async function handleToolCall(
       try {
         await defaultSession!.page.click(args.selector);
         return {
-          toolResult: {
-            content: [
-              {
-                type: "text",
-                text: `Clicked: ${args.selector}`,
-              },
-            ],
-            isError: false,
-          },
+          content: [
+            {
+              type: "text",
+              text: `Clicked: ${args.selector}`,
+            },
+          ],
+          isError: false,
         };
       } catch (error) {
         return {
-          toolResult: {
-            content: [
-              {
-                type: "text",
-                text: `Failed to click ${args.selector}: ${
-                  (error as Error).message
-                }`,
-              },
-            ],
-            isError: true,
-          },
+          content: [
+            {
+              type: "text",
+              text: `Failed to click ${args.selector}: ${
+                (error as Error).message
+              }`,
+            },
+          ],
+          isError: true,
         };
       }
 
@@ -349,7 +331,7 @@ async function handleToolCall(
         await defaultSession!.page.waitForSelector(args.selector);
         await defaultSession!.page.type(args.selector, args.value);
         return {
-          toolResult: {
+          
             content: [
               {
                 type: "text",
@@ -357,21 +339,19 @@ async function handleToolCall(
               },
             ],
             isError: false,
-          },
+          
         };
       } catch (error) {
         return {
-          toolResult: {
-            content: [
-              {
-                type: "text",
-                text: `Failed to fill ${args.selector}: ${
-                  (error as Error).message
-                }`,
-              },
-            ],
-            isError: true,
-          },
+          content: [
+            {
+              type: "text",
+              text: `Failed to fill ${args.selector}: ${
+                (error as Error).message
+              }`,
+            },
+          ],
+          isError: true,
         };
       }
 
@@ -399,31 +379,27 @@ async function handleToolCall(
         }, args.script);
 
         return {
-          toolResult: {
-            content: [
-              {
-                type: "text",
-                text: `Execution result:\n${JSON.stringify(
-                  result.result,
-                  null,
-                  2
-                )}\n\nConsole output:\n${result.logs.join("\n")}`,
-              },
-            ],
-            isError: false,
-          },
+          content: [
+            {
+              type: "text",
+              text: `Execution result:\n${JSON.stringify(
+                result.result,
+                null,
+                2
+              )}\n\nConsole output:\n${result.logs.join("\n")}`,
+            },
+          ],
+          isError: false,
         };
       } catch (error) {
         return {
-          toolResult: {
-            content: [
-              {
-                type: "text",
-                text: `Script execution failed: ${(error as Error).message}`,
-              },
-            ],
-            isError: true,
-          },
+          content: [
+            {
+              type: "text",
+              text: `Script execution failed: ${(error as Error).message}`,
+            },
+          ],
+          isError: true,
         };
       }
 
@@ -509,27 +485,23 @@ async function handleToolCall(
         }, args.selector);
 
         return {
-          toolResult: {
-            content: [
-              {
-                type: "text",
-                text: `Found JSON content:\n${JSON.stringify(result, null, 2)}`,
-              },
-            ],
-            isError: false,
-          },
+          content: [
+            {
+              type: "text",
+              text: `Found JSON content:\n${JSON.stringify(result, null, 2)}`,
+            },
+          ],
+          isError: false,
         };
       } catch (error) {
         return {
-          toolResult: {
-            content: [
-              {
-                type: "text",
-                text: `Failed to extract JSON: ${(error as Error).message}`,
-              },
-            ],
-            isError: true,
-          },
+          content: [
+            {
+              type: "text",
+              text: `Failed to extract JSON: ${(error as Error).message}`,
+            },
+          ],
+          isError: true,
         };
       }
 
@@ -552,41 +524,35 @@ async function handleToolCall(
         }
 
         return {
-          toolResult: {
-            content: [
-              {
-                type: "text",
-                text: `Extracted content:\n${JSON.stringify(content, null, 2)}`,
-              },
-            ],
-            isError: false,
-          },
+          content: [
+            {
+              type: "text",
+              text: `Extracted content:\n${JSON.stringify(content, null, 2)}`,
+            },
+          ],
+          isError: false,
         };
       } catch (error) {
         return {
-          toolResult: {
-            content: [
-              {
-                type: "text",
-                text: `Failed to extract content: ${(error as Error).message}`,
-              },
-            ],
-            isError: true,
-          },
+          content: [
+            {
+              type: "text",
+              text: `Failed to extract content: ${(error as Error).message}`,
+            },
+          ],
+          isError: true,
         };
       }
 
     default:
       return {
-        toolResult: {
-          content: [
-            {
-              type: "text",
-              text: `Unknown tool: ${name}`,
-            },
-          ],
-          isError: true,
-        },
+        content: [
+          {
+            type: "text",
+            text: `Unknown tool: ${name}`,
+          },
+        ],
+        isError: true,
       };
   }
 }
