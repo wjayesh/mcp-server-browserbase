@@ -1,5 +1,5 @@
 {
-  "name": "@modelcontextprotocol/mcp-server-browserbase",
+  "name": "@browserbasehq/mcp-browserbase",
   "version": "0.5.1",
   "description": "MCP server for browser automation using browserbase",
   "license": "MIT",

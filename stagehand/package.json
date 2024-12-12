@@ -1,5 +1,5 @@
 {
-  "name": "@modelcontextprotocol/server-stagehand",
+  "name": "@browserbasehq/mcp-stagehand",
   "version": "0.5.1",
   "description": "MCP server for AI web browser automation using Stagehand",
   "license": "MIT",

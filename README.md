@@ -19,6 +19,13 @@ This server provides cloud browser automation capabilities using [Browserbase](h
 | JavaScript | Execute custom JS in the browser context |
 | Web Interaction | Navigate, click, and fill forms with ease |
 
+### Installing
+
+To install the Browserbase MCP server for Claude Desktop automatically via [Smithery](https://smithery.ai/package/@browserbasehq/mcp-browserbase):
+
+```bash
+npx @smithery/cli install @browserbasehq/mcp-browserbase --client claude
+```
 
 🤘 **Stagehand MCP** - Located in [`stagehand/`](./stagehand/) *(Coming Soon)*
 
@@ -29,3 +36,11 @@ This server provides cloud browser automation capabilities using [Browserbase](h
 | Modular Design | Easily integrate new models with minimal changes |
 | Vision Support | Use annotated screenshots for complex DOMs |
 | Open Source | Contribute to the project and join the [Slack community](https://join.slack.com/t/stagehand-dev/shared_invite/zt-2uvuobu50-~wVSx2Si75CPa3332hwVEw) for support |
+
+### Installing
+
+To install the Stagehand MCP server for Claude Desktop automatically via [Smithery](https://smithery.ai/package/@browserbasehq/mcp-stagehand):
+
+```bash
+npx @smithery/cli install @browserbasehq/mcp-stagehand --client claude
+```
