@@ -162,6 +162,7 @@ function log(message: string) {
   const timestamp = new Date().toISOString();
   const logMessage = `[${timestamp}] ${message}`;
   operationLogs.push(logMessage);
+  if (process.env.DEBUG) console.error(logMessage);
 }
 
 // Ensure Stagehand is initialized
@@ -187,7 +188,7 @@ async function ensureStagehand() {
 async function handleToolCall(
   name: string,
   args: any
-): Promise<{ toolResult: CallToolResult }> {
+): Promise<CallToolResult> {
   log(`Handling tool call: ${name} with args: ${JSON.stringify(args)}`);
 
   try {
@@ -196,19 +197,17 @@ async function handleToolCall(
     const errorMsg = error instanceof Error ? error.message : String(error);
     log(`Failed to initialize Stagehand: ${errorMsg}`);
     return {
-      toolResult: {
-        content: [
-          {
-            type: "text",
-            text: `Failed to initialize Stagehand: ${errorMsg}`,
-          },
-          {
-            type: "text",
-            text: `Operation logs:\n${operationLogs.join("\n")}`,
-          },
-        ],
-        isError: true,
-      },
+      content: [
+        {
+          type: "text",
+          text: `Failed to initialize Stagehand: ${errorMsg}`,
+        },
+        {
+          type: "text",
+          text: `Operation logs:\n${operationLogs.join("\n")}`,
+        },
+      ],
+      isError: true,
     };
   }
 
@@ -219,33 +218,29 @@ async function handleToolCall(
         await stagehand.page.goto(args.url);
         log("Navigation successful");
         return {
-          toolResult: {
-            content: [
-              {
-                type: "text",
-                text: `Navigated to: ${args.url}`,
-              },
-            ],
-            isError: false,
-          },
+          content: [
+            {
+              type: "text",
+              text: `Navigated to: ${args.url}`,
+            },
+          ],
+          isError: false,
         };
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
         log(`Navigation failed: ${errorMsg}`);
         return {
-          toolResult: {
-            content: [
-              {
-                type: "text",
-                text: `Failed to navigate: ${errorMsg}`,
-              },
-              {
-                type: "text",
-                text: `Operation logs:\n${operationLogs.join("\n")}`,
-              },
-            ],
-            isError: true,
-          },
+          content: [
+            {
+              type: "text",
+              text: `Failed to navigate: ${errorMsg}`,
+            },
+            {
+              type: "text",
+              text: `Operation logs:\n${operationLogs.join("\n")}`,
+            },
+          ],
+          isError: true,
         };
       }
 
@@ -258,33 +253,29 @@ async function handleToolCall(
         });
         log("Action completed successfully");
         return {
-          toolResult: {
-            content: [
-              {
-                type: "text",
-                text: `Action performed: ${args.action}`,
-              },
-            ],
-            isError: false,
-          },
+          content: [
+            {
+              type: "text",
+              text: `Action performed: ${args.action}`,
+            },
+          ],
+          isError: false,
         };
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
         log(`Action failed: ${errorMsg}`);
         return {
-          toolResult: {
-            content: [
-              {
-                type: "text",
-                text: `Failed to perform action: ${errorMsg}`,
-              },
-              {
-                type: "text",
-                text: `Operation logs:\n${operationLogs.join("\n")}`,
-              },
-            ],
-            isError: true,
-          },
+          content: [
+            {
+              type: "text",
+              text: `Failed to perform action: ${errorMsg}`,
+            },
+            {
+              type: "text",
+              text: `Operation logs:\n${operationLogs.join("\n")}`,
+            },
+          ],
+          isError: true,
         };
       }
 
@@ -300,37 +291,33 @@ async function handleToolCall(
         });
         log(`Data extracted successfully: ${JSON.stringify(data)}`);
         return {
-          toolResult: {
-            content: [
-              {
-                type: "text",
-                text: `Extraction result: ${JSON.stringify(data)}`,
-              },
-              {
-                type: "text",
-                text: `Operation logs:\n${operationLogs.join("\n")}`,
-              },
-            ],
-            isError: false,
-          },
+          content: [
+            {
+              type: "text",
+              text: `Extraction result: ${JSON.stringify(data)}`,
+            },
+            {
+              type: "text",
+              text: `Operation logs:\n${operationLogs.join("\n")}`,
+            },
+          ],
+          isError: false,
         };
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
         log(`Extraction failed: ${errorMsg}`);
         return {
-          toolResult: {
-            content: [
-              {
-                type: "text",
-                text: `Failed to extract: ${errorMsg}`,
-              },
-              {
-                type: "text",
-                text: `Operation logs:\n${operationLogs.join("\n")}`,
-              },
-            ],
-            isError: true,
-          },
+          content: [
+            {
+              type: "text",
+              text: `Failed to extract: ${errorMsg}`,
+            },
+            {
+              type: "text",
+              text: `Operation logs:\n${operationLogs.join("\n")}`,
+            },
+          ],
+          isError: true,
         };
       }
     case "stagehand_observe":
@@ -343,44 +330,22 @@ async function handleToolCall(
           `Observation completed successfully: ${JSON.stringify(observations)}`
         );
         return {
-          toolResult: {
-            content: [
-              {
-                type: "text",
-                text: `Observations: ${JSON.stringify(observations)}`,
-              },
-            ],
-            isError: false,
-          },
+          content: [
+            {
+              type: "text",
+              text: `Observations: ${JSON.stringify(observations)}`,
+            },
+          ],
+          isError: false,
         };
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
         log(`Observation failed: ${errorMsg}`);
         return {
-          toolResult: {
-            content: [
-              {
-                type: "text",
-                text: `Failed to observe: ${errorMsg}`,
-              },
-              {
-                type: "text",
-                text: `Operation logs:\n${operationLogs.join("\n")}`,
-              },
-            ],
-            isError: true,
-          },
-        };
-      }
-
-    default:
-      log(`Unknown tool called: ${name}`);
-      return {
-        toolResult: {
           content: [
             {
               type: "text",
-              text: `Unknown tool: ${name}`,
+              text: `Failed to observe: ${errorMsg}`,
             },
             {
               type: "text",
@@ -388,7 +353,23 @@ async function handleToolCall(
             },
           ],
           isError: true,
-        },
+        };
+      }
+
+    default:
+      log(`Unknown tool called: ${name}`);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Unknown tool: ${name}`,
+          },
+          {
+            type: "text",
+            text: `Operation logs:\n${operationLogs.join("\n")}`,
+          },
+        ],
+        isError: true,
       };
   }
 }
