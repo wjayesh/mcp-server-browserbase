@@ -165,23 +165,11 @@ const TOOLS: Tool[] = [
           type: "string",
           description:
             "Optional CSS selector to get content from specific elements (default: returns whole page)",
-          required: false,
         },
       },
       required: [],
     },
-  },
-  {
-    name: "browserbase_close_session",
-    description: "Close a browser session",
-    inputSchema: {
-      type: "object",
-      properties: {
-        sessionId: { type: "string" },
-      },
-      required: ["sessionId"],
-    },
-  },
+  }
 ];
 
 // 5. Tool Handler Implementation
