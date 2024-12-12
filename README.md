@@ -21,7 +21,7 @@ This server provides cloud browser automation capabilities using [Browserbase](h
 
 ### Installing
 
-To install the Browserbase MCP server for Claude Desktop automatically via [Smithery](https://smithery.ai/package/@browserbasehq/mcp-browserbase):
+To install the Browserbase MCP server for Claude Desktop automatically via [Smithery](https://smithery.ai/protocol/@browserbasehq/mcp-browserbase):
 
 ```bash
 npx @smithery/cli install @browserbasehq/mcp-browserbase --client claude
@@ -39,7 +39,7 @@ npx @smithery/cli install @browserbasehq/mcp-browserbase --client claude
 
 ### Installing
 
-To install the Stagehand MCP server for Claude Desktop automatically via [Smithery](https://smithery.ai/package/@browserbasehq/mcp-stagehand):
+To install the Stagehand MCP server for Claude Desktop automatically via [Smithery](https://smithery.ai/protocol/@browserbasehq/mcp-stagehand):
 
 ```bash
 npx @smithery/cli install @browserbasehq/mcp-stagehand --client claude
