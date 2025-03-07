@@ -96,7 +96,6 @@ const TOOLS: Tool[] = [
       required: ["action"],
     },
   },
-  /* 
   {
     name: "stagehand_extract",
     description: `Extracts structured data from the web page based on an instruction and a JSON schema.`,
@@ -192,7 +191,6 @@ const TOOLS: Tool[] = [
       required: ["instruction", "schema"],
     },
   },
-  */
   {
     name: "stagehand_observe",
     description: "Observes actions that can be performed on the web page",
@@ -386,7 +384,6 @@ async function handleToolCall(
         };
       }
 
-    /* 
     case "stagehand_extract":
       try {
         log(`Extracting data with instruction: ${args.instruction}`);
@@ -432,7 +429,6 @@ async function handleToolCall(
           isError: true,
         };
       }
-    */
     case "stagehand_observe":
       try {
         log(`Starting observation with instruction: ${args.instruction}`);
