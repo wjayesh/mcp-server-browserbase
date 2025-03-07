@@ -7,9 +7,12 @@ import {
   ListToolsRequestSchema,
   CallToolResult,
   Tool,
+  ListResourcesRequestSchema, 
+  ListResourceTemplatesRequestSchema
 } from "@modelcontextprotocol/sdk/types.js";
 
 import { Stagehand } from "@browserbasehq/stagehand";
+import type { ConstructorParams, LogLine } from "@browserbasehq/stagehand";
 
 import { AnyZodObject } from "zod";
 import { jsonSchemaToZod } from "./utils.js";
@@ -29,6 +32,41 @@ if (!fs.existsSync(LOG_DIR)) {
   fs.mkdirSync(LOG_DIR, { recursive: true });
 }
 
+// Helper function to convert LogLine to string
+function logLineToString(logLine: LogLine): string {
+  const timestamp = logLine.timestamp ? new Date(logLine.timestamp).toISOString() : new Date().toISOString();
+  const level = logLine.level !== undefined ? 
+    (logLine.level === 0 ? 'DEBUG' : 
+     logLine.level === 1 ? 'INFO' : 
+     logLine.level === 2 ? 'ERROR' : 'UNKNOWN') : 'UNKNOWN';
+  return `[${timestamp}] [${level}] ${logLine.message || ''}`;
+}
+
+// Define Stagehand configuration
+const stagehandConfig: ConstructorParams = {
+  env:
+    process.env.BROWSERBASE_API_KEY && process.env.BROWSERBASE_PROJECT_ID
+      ? "BROWSERBASE"
+      : "LOCAL",
+  apiKey: process.env.BROWSERBASE_API_KEY /* API key for authentication */,
+  projectId: process.env.BROWSERBASE_PROJECT_ID /* Project identifier */,
+  debugDom: true /* Enable DOM debugging features */,
+  headless: false /* Run browser in headless mode */,
+  logger: (message: LogLine) =>
+    console.log(logLineToString(message)) /* Custom logging function */,
+  domSettleTimeoutMs: 30_000 /* Timeout for DOM to settle in milliseconds */,
+  browserbaseSessionCreateParams: {
+    projectId: process.env.BROWSERBASE_PROJECT_ID!,
+  },
+  enableCaching: true /* Enable caching functionality */,
+  browserbaseSessionID:
+    undefined /* Session ID for resuming Browserbase sessions */,
+  modelName: "gpt-4o" /* Name of the model to use */,
+  modelClientOptions: {
+    apiKey: process.env.OPENAI_API_KEY,
+  } /* Configuration options for the model client */,
+};
+
 // Define the Stagehand tools
 const TOOLS: Tool[] = [
   {
@@ -44,7 +82,7 @@ const TOOLS: Tool[] = [
   },
   {
     name: "stagehand_act",
-    description: "Performs an action on the web page",
+    description: "Performs an action on a web page element",
     inputSchema: {
       type: "object",
       properties: {
@@ -58,6 +96,7 @@ const TOOLS: Tool[] = [
       required: ["action"],
     },
   },
+  /* 
   {
     name: "stagehand_extract",
     description: `Extracts structured data from the web page based on an instruction and a JSON schema.`,
@@ -153,6 +192,7 @@ const TOOLS: Tool[] = [
       required: ["instruction", "schema"],
     },
   },
+  */
   {
     name: "stagehand_observe",
     description: "Observes actions that can be performed on the web page",
@@ -161,9 +201,10 @@ const TOOLS: Tool[] = [
       properties: {
         instruction: {
           type: "string",
-          description: "Instruction for observation",
+          description: "Instruction for observation (e.g., 'find the login button')",
         },
       },
+      required: ["instruction"],
     },
   },
 ];
@@ -210,13 +251,7 @@ async function ensureStagehand() {
   log("Ensuring Stagehand is initialized...");
   if (!stagehand) {
     log("Initializing Stagehand...");
-    stagehand = new Stagehand({
-      env: "BROWSERBASE",
-      headless: true,
-      verbose: 2,
-      debugDom: true,
-      modelName: "claude-3-5-sonnet-20241022",
-    });
+    stagehand = new Stagehand(stagehandConfig);
     log("Running init()");
     await stagehand.init();
     log("Stagehand initialized successfully");
@@ -319,7 +354,7 @@ async function handleToolCall(
     case "stagehand_act":
       try {
         log(`Performing action: ${args.action}`);
-        await stagehand.act({
+        await stagehand.page.act({
           action: args.action,
           variables: args.variables,
         });
@@ -351,6 +386,7 @@ async function handleToolCall(
         };
       }
 
+    /* 
     case "stagehand_extract":
       try {
         log(`Extracting data with instruction: ${args.instruction}`);
@@ -396,10 +432,11 @@ async function handleToolCall(
           isError: true,
         };
       }
+    */
     case "stagehand_observe":
       try {
         log(`Starting observation with instruction: ${args.instruction}`);
-        const observations = await stagehand.observe({
+        const observations = await stagehand.page.observe({
           instruction: args.instruction,
         });
         log(
@@ -504,6 +541,47 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     log(`CallTool handler error: ${errorMsg}`, 'error');
+    return {
+      error: {
+        code: -32603,
+        message: `Internal error: ${errorMsg}`,
+      },
+    };
+  }
+});
+
+
+server.setRequestHandler(ListResourcesRequestSchema, async (request) => {
+  try {
+    logRequest('ListResources', request.params);
+    // Return an empty list since we don't have any resources defined
+    const response = { resources: [] };
+    const sanitizedResponse = sanitizeMessage(response);
+    logResponse('ListResources', JSON.parse(sanitizedResponse));
+    return JSON.parse(sanitizedResponse);
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    log(`ListResources handler error: ${errorMsg}`, 'error');
+    return {
+      error: {
+        code: -32603,
+        message: `Internal error: ${errorMsg}`,
+      },
+    };
+  }
+});
+
+server.setRequestHandler(ListResourceTemplatesRequestSchema, async (request) => {
+  try {
+    logRequest('ListResourceTemplates', request.params);
+    // Return an empty list since we don't have any resource templates defined
+    const response = { resourceTemplates: [] };
+    const sanitizedResponse = sanitizeMessage(response);
+    logResponse('ListResourceTemplates', JSON.parse(sanitizedResponse));
+    return JSON.parse(sanitizedResponse);
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    log(`ListResourceTemplates handler error: ${errorMsg}`, 'error');
     return {
       error: {
         code: -32603,
