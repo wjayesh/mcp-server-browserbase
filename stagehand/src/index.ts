@@ -214,43 +214,43 @@ const consoleLogs: string[] = [];
 const operationLogs: string[] = [];
 
 function log(message: string, level: 'info' | 'error' | 'debug' = 'info') {
-  // const timestamp = new Date().toISOString();
-  // const logMessage = `[${timestamp}] [${level.toUpperCase()}] ${message}`;
-  // operationLogs.push(logMessage);
+  const timestamp = new Date().toISOString();
+  const logMessage = `[${timestamp}] [${level.toUpperCase()}] ${message}`;
+  operationLogs.push(logMessage);
   
-  // // Write to file
-  // fs.appendFileSync(LOG_FILE, logMessage + '\n');
+  // Write to file
+  fs.appendFileSync(LOG_FILE, logMessage + '\n');
   
-  // // Console output to stderr
-  // if (process.env.DEBUG || level === 'error') {
-  //   console.error(logMessage);
-  // }
+  // Console output to stderr
+  if (process.env.DEBUG || level === 'error') {
+    console.error(logMessage);
+  }
   
-  // // Send logging message to client for important events
-  // if (serverInstance && (level === 'info' || level === 'error')) {
-  //   serverInstance.sendLoggingMessage({
-  //     level: level,
-  //     data: message,
-  //   });
-  // }
+  // Send logging message to client for important events
+  if (serverInstance && (level === 'info' || level === 'error')) {
+    serverInstance.sendLoggingMessage({
+      level: level,
+      data: message,
+    });
+  }
 }
 
 function logRequest(type: string, params: any) {
-  // const requestLog = {
-  //   timestamp: new Date().toISOString(),
-  //   type,
-  //   params,
-  // };
-  // log(`REQUEST: ${JSON.stringify(requestLog, null, 2)}`, 'debug');
+  const requestLog = {
+    timestamp: new Date().toISOString(),
+    type,
+    params,
+  };
+  log(`REQUEST: ${JSON.stringify(requestLog, null, 2)}`, 'debug');
 }
 
 function logResponse(type: string, response: any) {
-  // const responseLog = {
-  //   timestamp: new Date().toISOString(),
-  //   type,
-  //   response,
-  // };
-  // log(`RESPONSE: ${JSON.stringify(responseLog, null, 2)}`, 'debug');
+  const responseLog = {
+    timestamp: new Date().toISOString(),
+    type,
+    response,
+  };
+  log(`RESPONSE: ${JSON.stringify(responseLog, null, 2)}`, 'debug');
 }
 
 // Ensure Stagehand is initialized
@@ -506,6 +506,7 @@ const server = new Server(
     capabilities: {
       resources: {},
       tools: {},
+      logging: {},
     },
   }
 );
