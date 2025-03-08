@@ -53,7 +53,7 @@ const stagehandConfig: ConstructorParams = {
   debugDom: true /* Enable DOM debugging features */,
   headless: false /* Run browser in headless mode */,
   logger: (message: LogLine) =>
-    console.log(logLineToString(message)) /* Custom logging function */,
+    console.error(logLineToString(message)) /* Custom logging function to stderr */,
   domSettleTimeoutMs: 30_000 /* Timeout for DOM to settle in milliseconds */,
   browserbaseSessionCreateParams: {
     projectId: process.env.BROWSERBASE_PROJECT_ID!,
@@ -209,50 +209,59 @@ const TOOLS: Tool[] = [
 
 // Global state
 let stagehand: Stagehand | undefined;
+let serverInstance: Server | undefined;
 const consoleLogs: string[] = [];
 const operationLogs: string[] = [];
 
 function log(message: string, level: 'info' | 'error' | 'debug' = 'info') {
-  const timestamp = new Date().toISOString();
-  const logMessage = `[${timestamp}] [${level.toUpperCase()}] ${message}`;
-  operationLogs.push(logMessage);
+  // const timestamp = new Date().toISOString();
+  // const logMessage = `[${timestamp}] [${level.toUpperCase()}] ${message}`;
+  // operationLogs.push(logMessage);
   
-  // Write to file
-  fs.appendFileSync(LOG_FILE, logMessage + '\n');
+  // // Write to file
+  // fs.appendFileSync(LOG_FILE, logMessage + '\n');
   
-  // Console output if debug is enabled
-  if (process.env.DEBUG || level === 'error') {
-    console.error(logMessage);
-  }
+  // // Console output to stderr
+  // if (process.env.DEBUG || level === 'error') {
+  //   console.error(logMessage);
+  // }
+  
+  // // Send logging message to client for important events
+  // if (serverInstance && (level === 'info' || level === 'error')) {
+  //   serverInstance.sendLoggingMessage({
+  //     level: level,
+  //     data: message,
+  //   });
+  // }
 }
 
 function logRequest(type: string, params: any) {
-  const requestLog = {
-    timestamp: new Date().toISOString(),
-    type,
-    params,
-  };
-  log(`REQUEST: ${JSON.stringify(requestLog, null, 2)}`, 'debug');
+  // const requestLog = {
+  //   timestamp: new Date().toISOString(),
+  //   type,
+  //   params,
+  // };
+  // log(`REQUEST: ${JSON.stringify(requestLog, null, 2)}`, 'debug');
 }
 
 function logResponse(type: string, response: any) {
-  const responseLog = {
-    timestamp: new Date().toISOString(),
-    type,
-    response,
-  };
-  log(`RESPONSE: ${JSON.stringify(responseLog, null, 2)}`, 'debug');
+  // const responseLog = {
+  //   timestamp: new Date().toISOString(),
+  //   type,
+  //   response,
+  // };
+  // log(`RESPONSE: ${JSON.stringify(responseLog, null, 2)}`, 'debug');
 }
 
 // Ensure Stagehand is initialized
 async function ensureStagehand() {
-  log("Ensuring Stagehand is initialized...");
+  // log("Ensuring Stagehand is initialized...");
   if (!stagehand) {
-    log("Initializing Stagehand...");
+    // log("Initializing Stagehand...");
     stagehand = new Stagehand(stagehandConfig);
-    log("Running init()");
+    // log("Running init()");
     await stagehand.init();
-    log("Stagehand initialized successfully");
+    // log("Stagehand initialized successfully");
   }
   return stagehand;
 }
@@ -277,7 +286,7 @@ function sanitizeMessage(message: any): string {
     }
     return JSON.stringify(message);
   } catch (error) {
-    log(`Invalid message format: ${error}`, 'error');
+    // log(`Invalid message format: ${error}`, 'error');
     return JSON.stringify({
       jsonrpc: '2.0',
       error: {
@@ -294,13 +303,13 @@ async function handleToolCall(
   name: string,
   args: any
 ): Promise<CallToolResult> {
-  log(`Handling tool call: ${name} with args: ${JSON.stringify(args)}`);
+  // log(`Handling tool call: ${name} with args: ${JSON.stringify(args)}`, 'info');
 
   try {
     stagehand = await ensureStagehand();
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    log(`Failed to initialize Stagehand: ${errorMsg}`, 'error');
+    // log(`Failed to initialize Stagehand: ${errorMsg}`, 'error');
     return {
       content: [
         {
@@ -315,13 +324,17 @@ async function handleToolCall(
       isError: true,
     };
   }
+  // log(`Stagehand initialized successfully`);
+  // log(`name: ${name}`);
+  // log(`args: ${JSON.stringify(args)}`);
+
 
   switch (name) {
     case "stagehand_navigate":
       try {
-        log(`Navigating to URL: ${args.url}`);
+        // log(`Navigating to URL: ${args.url}`, 'info');
         await stagehand.page.goto(args.url);
-        log("Navigation successful");
+        // log("Navigation successful", 'info');
         return {
           content: [
             {
@@ -333,7 +346,7 @@ async function handleToolCall(
         };
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
-        log(`Navigation failed: ${errorMsg}`);
+        // log(`Navigation failed: ${errorMsg}`, 'error');
         return {
           content: [
             {
@@ -351,12 +364,12 @@ async function handleToolCall(
 
     case "stagehand_act":
       try {
-        log(`Performing action: ${args.action}`);
+        // log(`Performing action: ${args.action}`, 'info');
         await stagehand.page.act({
           action: args.action,
           variables: args.variables,
         });
-        log("Action completed successfully");
+        // log("Action completed successfully", 'info');
         return {
           content: [
             {
@@ -368,7 +381,7 @@ async function handleToolCall(
         };
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
-        log(`Action failed: ${errorMsg}`);
+        // log(`Action failed: ${errorMsg}`, 'error');
         return {
           content: [
             {
@@ -386,8 +399,8 @@ async function handleToolCall(
 
     case "stagehand_extract":
       try {
-        log(`Extracting data with instruction: ${args.instruction}`);
-        log(`Schema: ${JSON.stringify(args.schema)}`);
+        // log(`Extracting data with instruction: ${args.instruction}`, 'info');
+        // log(`Schema: ${JSON.stringify(args.schema)}`, 'debug');
         // Convert the JSON schema from args.schema to a zod schema
         const zodSchema = jsonSchemaToZod(args.schema) as AnyZodObject;
         const data = await stagehand.extract({
@@ -398,7 +411,7 @@ async function handleToolCall(
           throw new Error("Invalid extraction response format");
         }
         const extractedData = data.data;
-        log(`Data extracted successfully: ${JSON.stringify(extractedData)}`);
+        // log(`Data extracted successfully: ${JSON.stringify(extractedData)}`, 'info');
         return {
           content: [
             {
@@ -414,7 +427,7 @@ async function handleToolCall(
         };
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
-        log(`Extraction failed: ${errorMsg}`);
+        // log(`Extraction failed: ${errorMsg}`, 'error');
         return {
           content: [
             {
@@ -431,13 +444,13 @@ async function handleToolCall(
       }
     case "stagehand_observe":
       try {
-        log(`Starting observation with instruction: ${args.instruction}`);
+        // log(`Starting observation with instruction: ${args.instruction}`, 'info');
         const observations = await stagehand.page.observe({
           instruction: args.instruction,
         });
-        log(
-          `Observation completed successfully: ${JSON.stringify(observations)}`
-        );
+        // log(
+        //   `Observation completed successfully: ${JSON.stringify(observations)}`, 'info'
+        // );
         return {
           content: [
             {
@@ -449,7 +462,7 @@ async function handleToolCall(
         };
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
-        log(`Observation failed: ${errorMsg}`);
+        // log(`Observation failed: ${errorMsg}`, 'error');
         return {
           content: [
             {
@@ -466,7 +479,7 @@ async function handleToolCall(
       }
 
     default:
-      log(`Unknown tool called: ${name}`);
+      // log(`Unknown tool called: ${name}`, 'error');
       return {
         content: [
           {
@@ -497,6 +510,9 @@ const server = new Server(
   }
 );
 
+// Store server instance for logging
+serverInstance = server;
+
 // Setup request handlers
 server.setRequestHandler(ListToolsRequestSchema, async (request) => {
   try {
@@ -507,7 +523,7 @@ server.setRequestHandler(ListToolsRequestSchema, async (request) => {
     return JSON.parse(sanitizedResponse);
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    log(`ListTools handler error: ${errorMsg}`, 'error');
+    // log(`ListTools handler error: ${errorMsg}`, 'error');
     return {
       error: {
         code: -32603,
@@ -536,7 +552,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     return JSON.parse(sanitizedResult);
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    log(`CallTool handler error: ${errorMsg}`, 'error');
+    // log(`CallTool handler error: ${errorMsg}`, 'error');
     return {
       error: {
         code: -32603,
@@ -557,7 +573,7 @@ server.setRequestHandler(ListResourcesRequestSchema, async (request) => {
     return JSON.parse(sanitizedResponse);
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    log(`ListResources handler error: ${errorMsg}`, 'error');
+    // log(`ListResources handler error: ${errorMsg}`, 'error');
     return {
       error: {
         code: -32603,
@@ -577,7 +593,7 @@ server.setRequestHandler(ListResourceTemplatesRequestSchema, async (request) => 
     return JSON.parse(sanitizedResponse);
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    log(`ListResourceTemplates handler error: ${errorMsg}`, 'error');
+    // log(`ListResourceTemplates handler error: ${errorMsg}`, 'error');
     return {
       error: {
         code: -32603,
@@ -589,14 +605,18 @@ server.setRequestHandler(ListResourceTemplatesRequestSchema, async (request) => 
 
 // Run the server
 async function runServer() {
-  log("Starting Stagehand MCP server...", 'info');
+  // log("Starting Stagehand MCP server...", 'info');
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  log("Server started successfully", 'info');
+  // log("Server started successfully", 'info');
+  server.sendLoggingMessage({
+    level: "info",
+    data: "Stagehand MCP server is ready to accept requests",
+  });
 }
 
 runServer().catch((error) => {
   const errorMsg = error instanceof Error ? error.message : String(error);
-  log(`Server error: ${errorMsg}`, 'error');
+  // log(`Server error: ${errorMsg}`, 'error');
   console.error(error);
 });
