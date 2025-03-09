@@ -50,7 +50,7 @@ const stagehandConfig: ConstructorParams = {
       : "LOCAL",
   apiKey: process.env.BROWSERBASE_API_KEY /* API key for authentication */,
   projectId: process.env.BROWSERBASE_PROJECT_ID /* Project identifier */,
-  debugDom: true /* Enable DOM debugging features */,
+  debugDom: false /* Enable DOM debugging features */,
   headless: false /* Run browser in headless mode */,
   logger: (message: LogLine) =>
     console.error(logLineToString(message)) /* Custom logging function to stderr */,
@@ -65,6 +65,7 @@ const stagehandConfig: ConstructorParams = {
   modelClientOptions: {
     apiKey: process.env.OPENAI_API_KEY,
   } /* Configuration options for the model client */,
+  useAPI: false,
 };
 
 // Define the Stagehand tools
@@ -368,6 +369,7 @@ async function handleToolCall(
         await stagehand.page.act({
           action: args.action,
           variables: args.variables,
+          slowDomBasedAct: false,
         });
         // log("Action completed successfully", 'info');
         return {
@@ -403,9 +405,10 @@ async function handleToolCall(
         // log(`Schema: ${JSON.stringify(args.schema)}`, 'debug');
         // Convert the JSON schema from args.schema to a zod schema
         const zodSchema = jsonSchemaToZod(args.schema) as AnyZodObject;
-        const data = await stagehand.extract({
+        const data = await stagehand.page.extract({
           instruction: args.instruction,
           schema: zodSchema,
+          useTextExtract: true,
         });
         if (!data || typeof data !== "object" || !("data" in data)) {
           throw new Error("Invalid extraction response format");
