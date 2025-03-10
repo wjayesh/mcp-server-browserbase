@@ -72,7 +72,7 @@ const stagehandConfig: ConstructorParams = {
 const TOOLS: Tool[] = [
   {
     name: "stagehand_navigate",
-    description: "Navigate to a URL in the browser",
+    description: "Navigate to a URL in the browser. Only use this tool with URLs you're confident will work and stay up to date. Otheriwse use https://google.com as the starting point",
     inputSchema: {
       type: "object",
       properties: {
@@ -83,15 +83,24 @@ const TOOLS: Tool[] = [
   },
   {
     name: "stagehand_act",
-    description: "Performs an action on a web page element",
+    description: `Performs an action on a web page element. Act actions should be as atomic and 
+      specific as possible, i.e. "Click the sign in button" or "Type 'hello' into the search input". 
+      AVOID actions that are more than one step, i.e. "Order me pizza" or "Send an email to Paul 
+      asking him to call me". `,
     inputSchema: {
       type: "object",
       properties: {
-        action: { type: "string", description: "The action to perform" },
+        action: { type: "string", description: `The action to perform. Should be as atomic and specific as possible, 
+          i.e. 'Click the sign in button' or 'Type 'hello' into the search input'. AVOID actions that are more than one 
+          step, i.e. 'Order me pizza' or 'Send an email to Paul asking him to call me'. The instruction should be just as specific as possible, 
+          and have a strong correlation to the text on the page. If unsure, use observe before using act."` },
         variables: {
           type: "object",
           additionalProperties: true,
-          description: "Variables used in the action template",
+          description: `Variables used in the action template. ONLY use variables if you're dealing 
+            with sensitive data or dynamic content. For example, if you're logging in to a website, 
+            you can use a variable for the password. When using variables, you MUST have the variable
+            key in the action template. For example: {"action": "Fill in the password", "variables": {"password": "123456"}}`,
         },
       },
       required: ["action"],
@@ -99,12 +108,12 @@ const TOOLS: Tool[] = [
   },
   {
     name: "stagehand_extract",
-    description: `Extracts structured data from the web page based on an instruction and a JSON schema.`,
+    description: `Extracts structured data from the web page based on an instruction and a JSON schema (Zod schema). Extract works best for extracting TEXT in a structured format.`,
     inputSchema: {
       type: "object",
       description: `**Instructions for providing the schema:**
   
-  - The \`schema\` should be a valid JSON Schema object that defines the structure of the data to extract.
+  - The \`schema\` should be a valid JSON Schema (Zod) object that defines the structure of the data to extract.
   - Use standard JSON Schema syntax.
   - The server will convert the JSON Schema to a Zod schema internally.
   
@@ -194,13 +203,13 @@ const TOOLS: Tool[] = [
   },
   {
     name: "stagehand_observe",
-    description: "Observes actions that can be performed on the web page",
+    description: "Observes elements on the web page. Use this tool to observe elements that you can later use in an action. Use observe instead of extract when dealing with actionable (interactable) elements rather than text. More often than not, you'll want to use extract instead of observe when dealing with scraping or extracting structured text.",
     inputSchema: {
       type: "object",
       properties: {
         instruction: {
           type: "string",
-          description: "Instruction for observation (e.g., 'find the login button')",
+          description: "Instruction for observation (e.g., 'find the login button'). This instruction must be extremely specific.",
         },
       },
       required: ["instruction"],
@@ -382,9 +391,7 @@ async function handleToolCall(
           schema: zodSchema,
           useTextExtract: true,
         });
-        if (!data || typeof data !== "object" || !("data" in data)) {
-          throw new Error("Invalid extraction response format");
-        }
+        log(`Extraction result: ${JSON.stringify(data)}`, 'info');
         const extractedData = data.data;
         return {
           content: [
@@ -419,6 +426,7 @@ async function handleToolCall(
       try {
         const observations = await stagehand.page.observe({
           instruction: args.instruction,
+          returnAction: false,
         });
         return {
           content: [
