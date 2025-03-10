@@ -256,26 +256,11 @@ function logResponse(type: string, response: any) {
 
 // Ensure Stagehand is initialized
 async function ensureStagehand() {
-  // log("Ensuring Stagehand is initialized...");
   if (!stagehand) {
-    // log("Initializing Stagehand...");
     stagehand = new Stagehand(stagehandConfig);
-    // log("Running init()");
     await stagehand.init();
-    // log("Stagehand initialized successfully");
   }
   return stagehand;
-}
-
-// Add message validation utilities
-function isValidJsonRpcMessage(message: any): boolean {
-  return (
-    message &&
-    typeof message === 'object' &&
-    'jsonrpc' in message &&
-    message.jsonrpc === '2.0' &&
-    'id' in message
-  );
 }
 
 function sanitizeMessage(message: any): string {
@@ -287,7 +272,6 @@ function sanitizeMessage(message: any): string {
     }
     return JSON.stringify(message);
   } catch (error) {
-    // log(`Invalid message format: ${error}`, 'error');
     return JSON.stringify({
       jsonrpc: '2.0',
       error: {
@@ -304,13 +288,11 @@ async function handleToolCall(
   name: string,
   args: any
 ): Promise<CallToolResult> {
-  // log(`Handling tool call: ${name} with args: ${JSON.stringify(args)}`, 'info');
 
   try {
     stagehand = await ensureStagehand();
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    // log(`Failed to initialize Stagehand: ${errorMsg}`, 'error');
     return {
       content: [
         {
@@ -325,17 +307,13 @@ async function handleToolCall(
       isError: true,
     };
   }
-  // log(`Stagehand initialized successfully`);
-  // log(`name: ${name}`);
-  // log(`args: ${JSON.stringify(args)}`);
+
 
 
   switch (name) {
     case "stagehand_navigate":
       try {
-        // log(`Navigating to URL: ${args.url}`, 'info');
         await stagehand.page.goto(args.url);
-        // log("Navigation successful", 'info');
         return {
           content: [
             {
@@ -347,7 +325,6 @@ async function handleToolCall(
         };
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
-        // log(`Navigation failed: ${errorMsg}`, 'error');
         return {
           content: [
             {
@@ -365,13 +342,11 @@ async function handleToolCall(
 
     case "stagehand_act":
       try {
-        // log(`Performing action: ${args.action}`, 'info');
         await stagehand.page.act({
           action: args.action,
           variables: args.variables,
           slowDomBasedAct: false,
         });
-        // log("Action completed successfully", 'info');
         return {
           content: [
             {
@@ -383,7 +358,6 @@ async function handleToolCall(
         };
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
-        // log(`Action failed: ${errorMsg}`, 'error');
         return {
           content: [
             {
@@ -401,8 +375,6 @@ async function handleToolCall(
 
     case "stagehand_extract":
       try {
-        // log(`Extracting data with instruction: ${args.instruction}`, 'info');
-        // log(`Schema: ${JSON.stringify(args.schema)}`, 'debug');
         // Convert the JSON schema from args.schema to a zod schema
         const zodSchema = jsonSchemaToZod(args.schema) as AnyZodObject;
         const data = await stagehand.page.extract({
@@ -414,7 +386,6 @@ async function handleToolCall(
           throw new Error("Invalid extraction response format");
         }
         const extractedData = data.data;
-        // log(`Data extracted successfully: ${JSON.stringify(extractedData)}`, 'info');
         return {
           content: [
             {
@@ -430,7 +401,6 @@ async function handleToolCall(
         };
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
-        // log(`Extraction failed: ${errorMsg}`, 'error');
         return {
           content: [
             {
@@ -447,13 +417,9 @@ async function handleToolCall(
       }
     case "stagehand_observe":
       try {
-        // log(`Starting observation with instruction: ${args.instruction}`, 'info');
         const observations = await stagehand.page.observe({
           instruction: args.instruction,
         });
-        // log(
-        //   `Observation completed successfully: ${JSON.stringify(observations)}`, 'info'
-        // );
         return {
           content: [
             {
@@ -465,7 +431,6 @@ async function handleToolCall(
         };
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
-        // log(`Observation failed: ${errorMsg}`, 'error');
         return {
           content: [
             {
@@ -482,7 +447,6 @@ async function handleToolCall(
       }
 
     default:
-      // log(`Unknown tool called: ${name}`, 'error');
       return {
         content: [
           {
@@ -527,7 +491,6 @@ server.setRequestHandler(ListToolsRequestSchema, async (request) => {
     return JSON.parse(sanitizedResponse);
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    // log(`ListTools handler error: ${errorMsg}`, 'error');
     return {
       error: {
         code: -32603,
@@ -556,7 +519,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     return JSON.parse(sanitizedResult);
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    // log(`CallTool handler error: ${errorMsg}`, 'error');
     return {
       error: {
         code: -32603,
@@ -577,7 +539,6 @@ server.setRequestHandler(ListResourcesRequestSchema, async (request) => {
     return JSON.parse(sanitizedResponse);
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    // log(`ListResources handler error: ${errorMsg}`, 'error');
     return {
       error: {
         code: -32603,
@@ -597,7 +558,6 @@ server.setRequestHandler(ListResourceTemplatesRequestSchema, async (request) => 
     return JSON.parse(sanitizedResponse);
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    // log(`ListResourceTemplates handler error: ${errorMsg}`, 'error');
     return {
       error: {
         code: -32603,
@@ -609,10 +569,8 @@ server.setRequestHandler(ListResourceTemplatesRequestSchema, async (request) => 
 
 // Run the server
 async function runServer() {
-  // log("Starting Stagehand MCP server...", 'info');
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  // log("Server started successfully", 'info');
   server.sendLoggingMessage({
     level: "info",
     data: "Stagehand MCP server is ready to accept requests",
@@ -621,6 +579,5 @@ async function runServer() {
 
 runServer().catch((error) => {
   const errorMsg = error instanceof Error ? error.message : String(error);
-  // log(`Server error: ${errorMsg}`, 'error');
-  console.error(error);
+  console.error(errorMsg);
 });
