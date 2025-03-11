@@ -392,17 +392,12 @@ async function handleToolCall(
           useTextExtract: true,
         });
         log(`Extraction result: ${JSON.stringify(data)}`, 'info');
-        const extractedData = data.data;
         return {
           content: [
             {
               type: "text",
-              text: `Extraction result: ${JSON.stringify(extractedData)}`,
-            },
-            {
-              type: "text",
-              text: `Operation logs:\n${operationLogs.join("\n")}`,
-            },
+              text: `Extraction result: ${JSON.stringify(data)}`,
+            }
           ],
           isError: false,
         };
