@@ -215,6 +215,23 @@ const TOOLS: Tool[] = [
       required: ["instruction"],
     },
   },
+  {
+    name: "screenshot",
+    description: "Take a screenshot of the current page. Use this tool to learn where you are on the page when controlling the browser with Stagehand.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        fullPage: { 
+          type: "boolean", 
+          description: "Whether to take a screenshot of the full page (true) or just the visible viewport (false). Default is false." 
+        },
+        path: {
+          type: "string",
+          description: "Optional. Custom file path where the screenshot should be saved. If not provided, a default path will be used."
+        }
+      }
+    },
+  },
 ];
 
 // Global state
@@ -439,6 +456,57 @@ async function handleToolCall(
             {
               type: "text",
               text: `Failed to observe: ${errorMsg}`,
+            },
+            {
+              type: "text",
+              text: `Operation logs:\n${operationLogs.join("\n")}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+
+    case "screenshot":
+      try {
+        const fullPage = args.fullPage === true;
+        
+        // Create a screenshots directory next to the logs directory
+        const SCREENSHOTS_DIR = path.join(__dirname, '../screenshots');
+        if (!fs.existsSync(SCREENSHOTS_DIR)) {
+          fs.mkdirSync(SCREENSHOTS_DIR, { recursive: true });
+        }
+        
+        // Generate a filename based on timestamp if path not provided
+        const screenshotPath = args.path || path.join(SCREENSHOTS_DIR, `screenshot-${new Date().toISOString().replace(/:/g, '-')}.png`);
+        
+        // If a custom path is provided, ensure its directory exists
+        if (args.path) {
+          const customDir = path.dirname(screenshotPath);
+          if (!fs.existsSync(customDir)) {
+            fs.mkdirSync(customDir, { recursive: true });
+          }
+        }
+        
+        // Take the screenshot
+        // making fullpage false temporarily
+        await stagehand.page.screenshot({ path: screenshotPath, fullPage: false });
+        
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Screenshot taken and saved to: ${screenshotPath}`,
+            },
+          ],
+          isError: false,
+        };
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to take screenshot: ${errorMsg}`,
             },
             {
               type: "text",
