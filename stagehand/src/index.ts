@@ -8,7 +8,9 @@ import {
   CallToolResult,
   Tool,
   ListResourcesRequestSchema, 
-  ListResourceTemplatesRequestSchema
+  ListResourceTemplatesRequestSchema,
+  ListPromptsRequestSchema,
+  GetPromptRequestSchema
 } from "@modelcontextprotocol/sdk/types.js";
 
 import { Stagehand } from "@browserbasehq/stagehand";
@@ -299,6 +301,15 @@ const TOOLS: Tool[] = [
       }
     },
   },
+];
+
+// Define the prompts
+const PROMPTS = [
+  {
+    name: "click_search_button",
+    description: "A prompt template for clicking on a search button",
+    arguments: [] // No arguments required for this specific prompt
+  }
 ];
 
 // Global state
@@ -649,6 +660,7 @@ const server = new Server(
       resources: {},
       tools: {},
       logging: {},
+      prompts: {}
     },
   }
 );
@@ -730,6 +742,61 @@ server.setRequestHandler(ListResourceTemplatesRequestSchema, async (request) => 
     const response = { resourceTemplates: [] };
     const sanitizedResponse = sanitizeMessage(response);
     logResponse('ListResourceTemplates', JSON.parse(sanitizedResponse));
+    return JSON.parse(sanitizedResponse);
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    return {
+      error: {
+        code: -32603,
+        message: `Internal error: ${errorMsg}`,
+      },
+    };
+  }
+});
+
+server.setRequestHandler(ListPromptsRequestSchema, async (request) => {
+  try {
+    logRequest('ListPrompts', request.params);
+    const response = { prompts: PROMPTS };
+    const sanitizedResponse = sanitizeMessage(response);
+    logResponse('ListPrompts', JSON.parse(sanitizedResponse));
+    return JSON.parse(sanitizedResponse);
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    return {
+      error: {
+        code: -32603,
+        message: `Internal error: ${errorMsg}`,
+      },
+    };
+  }
+});
+
+server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+  try {
+    logRequest('GetPrompt', request.params);
+    
+    // Check if prompt name is valid
+    if (request.params?.name !== "click_search_button") {
+      throw new Error(`Invalid prompt name: ${request.params?.name}`);
+    }
+    
+    // Return a prompt for clicking on a search button
+    const response = {
+      description: "This prompt provides instructions for clicking on a search button",
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: "Please click on the search button"
+          }
+        }
+      ]
+    };
+    
+    const sanitizedResponse = sanitizeMessage(response);
+    logResponse('GetPrompt', JSON.parse(sanitizedResponse));
     return JSON.parse(sanitizedResponse);
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
