@@ -26,10 +26,77 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Configure logging
 const LOG_DIR = path.join(__dirname, '../logs');
 const LOG_FILE = path.join(LOG_DIR, `stagehand-${new Date().toISOString().split('T')[0]}.log`);
+const MAX_LOG_FILES = 10; // Maximum number of log files to keep
+const MAX_LOG_SIZE = 10 * 1024 * 1024; // 10MB max log file size
 
 // Ensure log directory exists
 if (!fs.existsSync(LOG_DIR)) {
   fs.mkdirSync(LOG_DIR, { recursive: true });
+}
+
+// Setup log rotation management
+function setupLogRotation() {
+  try {
+    // Check if current log file exceeds max size
+    if (fs.existsSync(LOG_FILE) && fs.statSync(LOG_FILE).size > MAX_LOG_SIZE) {
+      const timestamp = new Date().toISOString().replace(/:/g, '-');
+      const rotatedLogFile = path.join(LOG_DIR, `stagehand-${timestamp}.log`);
+      fs.renameSync(LOG_FILE, rotatedLogFile);
+    }
+    
+    // Clean up old log files if we have too many
+    const logFiles = fs.readdirSync(LOG_DIR)
+      .filter(file => file.startsWith('stagehand-') && file.endsWith('.log'))
+      .map(file => path.join(LOG_DIR, file))
+      .sort((a, b) => fs.statSync(b).mtime.getTime() - fs.statSync(a).mtime.getTime());
+    
+    if (logFiles.length > MAX_LOG_FILES) {
+      logFiles.slice(MAX_LOG_FILES).forEach(file => {
+        try {
+          fs.unlinkSync(file);
+        } catch (err) {
+          console.error(`Failed to delete old log file ${file}:`, err);
+        }
+      });
+    }
+  } catch (err) {
+    console.error('Error in log rotation:', err);
+  }
+}
+
+// Run log rotation on startup
+setupLogRotation();
+
+// Queue for batching log writes
+let logQueue: string[] = [];
+let logWriteTimeout: NodeJS.Timeout | null = null;
+const LOG_FLUSH_INTERVAL = 1000; // Flush logs every second
+
+// Flush logs to disk asynchronously
+async function flushLogs() {
+  if (logQueue.length === 0) return;
+  
+  const logsToWrite = logQueue.join('\n') + '\n';
+  logQueue = [];
+  logWriteTimeout = null;
+  
+  try {
+    await fs.promises.appendFile(LOG_FILE, logsToWrite);
+    
+    // Check if we need to rotate logs after write
+    const stats = await fs.promises.stat(LOG_FILE);
+    if (stats.size > MAX_LOG_SIZE) {
+      setupLogRotation();
+    }
+  } catch (err) {
+    console.error('Failed to write logs to file:', err);
+    // If write fails, try to use sync version as fallback
+    try {
+      fs.appendFileSync(LOG_FILE, logsToWrite);
+    } catch (syncErr) {
+      console.error('Failed to write logs synchronously:', syncErr);
+    }
+  }
 }
 
 // Helper function to convert LogLine to string
@@ -239,16 +306,35 @@ let stagehand: Stagehand | undefined;
 let serverInstance: Server | undefined;
 const consoleLogs: string[] = [];
 const operationLogs: string[] = [];
+const MAX_OPERATION_LOGS = 1000; // Prevent operation logs from growing too large
 
 function log(message: string, level: 'info' | 'error' | 'debug' = 'info') {
   const timestamp = new Date().toISOString();
   const logMessage = `[${timestamp}] [${level.toUpperCase()}] ${message}`;
+  
+  // Manage operation logs with size limit
   operationLogs.push(logMessage);
+  if (operationLogs.length > MAX_OPERATION_LOGS) {
+    // Keep most recent logs but trim the middle to maintain context
+    const half = Math.floor(MAX_OPERATION_LOGS / 2);
+    // Keep first 100 and last (MAX_OPERATION_LOGS - 100) logs
+    const firstLogs = operationLogs.slice(0, 100);
+    const lastLogs = operationLogs.slice(operationLogs.length - (MAX_OPERATION_LOGS - 100));
+    operationLogs.length = 0;
+    operationLogs.push(...firstLogs);
+    operationLogs.push(`[...${operationLogs.length - MAX_OPERATION_LOGS} logs truncated...]`);
+    operationLogs.push(...lastLogs);
+  }
   
-  // Write to file
-  fs.appendFileSync(LOG_FILE, logMessage + '\n');
+  // Queue log for async writing
+  logQueue.push(logMessage);
   
-  // Console output to stderr
+  // Setup timer to flush logs if not already scheduled
+  if (!logWriteTimeout) {
+    logWriteTimeout = setTimeout(flushLogs, LOG_FLUSH_INTERVAL);
+  }
+  
+  // Console output to stderr for debugging
   if (process.env.DEBUG || level === 'error') {
     console.error(logMessage);
   }
@@ -260,6 +346,26 @@ function log(message: string, level: 'info' | 'error' | 'debug' = 'info') {
       data: message,
     });
   }
+}
+
+// Add log rotation check periodically
+setInterval(() => {
+  setupLogRotation();
+}, 15 * 60 * 1000); // Check every 15 minutes
+
+function formatLogResponse(logs: string[]): string {
+  if (logs.length <= 100) {
+    return logs.join("\n");
+  }
+  
+  // For very long logs, include first and last parts with truncation notice
+  const first = logs.slice(0, 50);
+  const last = logs.slice(-50);
+  return [
+    ...first,
+    `\n... ${logs.length - 100} more log entries (truncated) ...\n`,
+    ...last
+  ].join("\n");
 }
 
 function logRequest(type: string, params: any) {
@@ -327,14 +433,12 @@ async function handleToolCall(
         },
         {
           type: "text",
-          text: `Operation logs:\n${operationLogs.join("\n")}`,
+          text: `Operation logs:\n${formatLogResponse(operationLogs)}`,
         },
       ],
       isError: true,
     };
   }
-
-
 
   switch (name) {
     case "stagehand_navigate":
@@ -359,7 +463,7 @@ async function handleToolCall(
             },
             {
               type: "text",
-              text: `Operation logs:\n${operationLogs.join("\n")}`,
+              text: `Operation logs:\n${formatLogResponse(operationLogs)}`,
             },
           ],
           isError: true,
@@ -392,7 +496,7 @@ async function handleToolCall(
             },
             {
               type: "text",
-              text: `Operation logs:\n${operationLogs.join("\n")}`,
+              text: `Operation logs:\n${formatLogResponse(operationLogs)}`,
             },
           ],
           isError: true,
@@ -428,7 +532,7 @@ async function handleToolCall(
             },
             {
               type: "text",
-              text: `Operation logs:\n${operationLogs.join("\n")}`,
+              text: `Operation logs:\n${formatLogResponse(operationLogs)}`,
             },
           ],
           isError: true,
@@ -459,7 +563,7 @@ async function handleToolCall(
             },
             {
               type: "text",
-              text: `Operation logs:\n${operationLogs.join("\n")}`,
+              text: `Operation logs:\n${formatLogResponse(operationLogs)}`,
             },
           ],
           isError: true,
@@ -510,7 +614,7 @@ async function handleToolCall(
             },
             {
               type: "text",
-              text: `Operation logs:\n${operationLogs.join("\n")}`,
+              text: `Operation logs:\n${formatLogResponse(operationLogs)}`,
             },
           ],
           isError: true,
@@ -526,7 +630,7 @@ async function handleToolCall(
           },
           {
             type: "text",
-            text: `Operation logs:\n${operationLogs.join("\n")}`,
+            text: `Operation logs:\n${formatLogResponse(operationLogs)}`,
           },
         ],
         isError: true,
@@ -651,4 +755,27 @@ async function runServer() {
 runServer().catch((error) => {
   const errorMsg = error instanceof Error ? error.message : String(error);
   console.error(errorMsg);
+});
+
+// Make sure logs are flushed when the process exits
+process.on('exit', () => {
+  if (logQueue.length > 0) {
+    try {
+      fs.appendFileSync(LOG_FILE, logQueue.join('\n') + '\n');
+    } catch (err) {
+      console.error('Failed to flush logs on exit:', err);
+    }
+  }
+});
+
+process.on('SIGINT', () => {
+  // Flush logs and exit
+  if (logQueue.length > 0) {
+    try {
+      fs.appendFileSync(LOG_FILE, logQueue.join('\n') + '\n');
+    } catch (err) {
+      console.error('Failed to flush logs on SIGINT:', err);
+    }
+  }
+  process.exit(0);
 });
