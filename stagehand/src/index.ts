@@ -282,11 +282,35 @@ function logResponse(type: string, response: any) {
 
 // Ensure Stagehand is initialized
 async function ensureStagehand() {
-  if (!stagehand) {
-    stagehand = new Stagehand(stagehandConfig);
-    await stagehand.init();
+  try {
+    if (!stagehand) {
+      stagehand = new Stagehand(stagehandConfig);
+      await stagehand.init();
+      return stagehand;
+    }
+
+    // Try to perform a simple operation to check if the session is still valid
+    try {
+      await stagehand.page.evaluate(() => document.title);
+      return stagehand;
+    } catch (error) {
+      // If we get an error indicating the session is invalid, reinitialize
+      if (error instanceof Error && 
+          (error.message.includes('Target page, context or browser has been closed') ||
+           error.message.includes('Session expired') ||
+           error.message.includes('context destroyed'))) {
+        log('Browser session expired, reinitializing Stagehand...', 'info');
+        stagehand = new Stagehand(stagehandConfig);
+        await stagehand.init();
+        return stagehand;
+      }
+      throw error; // Re-throw if it's a different type of error
+    }
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    log(`Failed to initialize/reinitialize Stagehand: ${errorMsg}`, 'error');
+    throw error;
   }
-  return stagehand;
 }
 
 function sanitizeMessage(message: any): string {
