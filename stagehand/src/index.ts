@@ -108,97 +108,10 @@ const TOOLS: Tool[] = [
   },
   {
     name: "stagehand_extract",
-    description: `Extracts structured data from the web page based on an instruction and a JSON schema (Zod schema). Extract works best for extracting TEXT in a structured format.`,
+    description: `Extracts all of the text from the current page.`,
     inputSchema: {
       type: "object",
-      description: `**Instructions for providing the schema:**
-  
-  - The \`schema\` should be a valid JSON Schema (Zod) object that defines the structure of the data to extract.
-  - Use standard JSON Schema syntax.
-  - The server will convert the JSON Schema to a Zod schema internally.
-  
-  **Example schemas:**
-  
-  1. **Extracting a list of search result titles:**
-  
-  \`\`\`json
-  {
-    "type": "object",
-    "properties": {
-      "searchResults": {
-        "type": "array",
-        "items": {
-          "type": "string",
-          "description": "Title of a search result"
-        }
-      }
-    },
-    "required": ["searchResults"]
-  }
-  \`\`\`
-  
-  2. **Extracting product details:**
-  
-  \`\`\`json
-  {
-    "type": "object",
-    "properties": {
-      "name": { "type": "string" },
-      "price": { "type": "string" },
-      "rating": { "type": "number" },
-      "reviews": {
-        "type": "array",
-        "items": { "type": "string" }
-      }
-    },
-    "required": ["name", "price", "rating", "reviews"]
-  }
-  \`\`\`
-  
-  **Example usage:**
-  
-  - **Instruction**: "Extract the titles and URLs of the main search results, excluding any ads."
-  - **Schema**:
-    \`\`\`json
-    {
-      "type": "object",
-      "properties": {
-        "results": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "title": { "type": "string", "description": "The title of the search result" },
-              "url": { "type": "string", "description": "The URL of the search result" }
-            },
-            "required": ["title", "url"]
-          }
-        }
-      },
-      "required": ["results"]
-    }
-    \`\`\`
-  
-  **Note:**
-  
-  - Ensure the schema is valid JSON.
-  - Use standard JSON Schema types like \`string\`, \`number\`, \`array\`, \`object\`, etc.
-  - You can add descriptions to help clarify the expected data.
-  `,
-      properties: {
-        instruction: {
-          type: "string",
-          description:
-            "Clear instruction for what data to extract from the page",
-        },
-        schema: {
-          type: "object",
-          description:
-            "A JSON Schema object defining the structure of data to extract",
-          additionalProperties: true,
-        },
-      },
-      required: ["instruction", "schema"],
+      properties: {},
     },
   },
   {
@@ -399,41 +312,53 @@ async function handleToolCall(
         };
       }
 
-    case "stagehand_extract":
-      try {
-        // Convert the JSON schema from args.schema to a zod schema
-        const zodSchema = jsonSchemaToZod(args.schema) as AnyZodObject;
-        const data = await stagehand.page.extract({
-          instruction: args.instruction,
-          schema: zodSchema,
-          useTextExtract: true,
-        });
-        log(`Extraction result: ${JSON.stringify(data)}`, 'info');
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Extraction result: ${JSON.stringify(data)}`,
-            }
-          ],
-          isError: false,
-        };
-      } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : String(error);
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Failed to extract: ${errorMsg}`,
-            },
-            {
-              type: "text",
-              text: `Operation logs:\n${operationLogs.join("\n")}`,
-            },
-          ],
-          isError: true,
-        };
+      case "stagehand_extract": {
+        try {
+          const bodyText = await stagehand.page.evaluate(() => document.body.innerText);
+          const content = bodyText
+            .split('\n')
+            .map(line => line.trim())
+            .filter(line => {
+              if (!line) return false;
+              
+              if (
+                  (line.includes('{') && line.includes('}')) ||         
+                  line.includes('@keyframes') ||                         // Remove CSS animations
+                  line.match(/^\.[a-zA-Z0-9_-]+\s*{/) ||               // Remove CSS lines starting with .className {
+                  line.match(/^[a-zA-Z-]+:[a-zA-Z0-9%\s\(\)\.,-]+;$/)  // Remove lines like "color: blue;" or "margin: 10px;"
+                ) {
+                return false;
+              }
+              return true;
+            })
+            .map(line => {
+              return line.replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) => 
+                String.fromCharCode(parseInt(hex, 16))
+              );
+            });
+          
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Extracted content:\n${content.join('\n')}`,
+              },
+            ],
+            isError: false,
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Failed to extract content: ${(error as Error).message}`,
+              },
+            ],
+            isError: true,
+          };
+        }
       }
+
     case "stagehand_observe":
       try {
         const observations = await stagehand.page.observe({
