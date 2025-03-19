@@ -259,6 +259,10 @@ async function handleToolCall(
               type: "text",
               text: `Navigated to: ${args.url}`,
             },
+            {
+              type: "text",
+              text: `View the live session here: https://browserbase.com/sessions/${stagehand.browserbaseSessionID}`,
+            },
           ],
           isError: false,
         };
