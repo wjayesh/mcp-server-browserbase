@@ -14,8 +14,6 @@ import {
 import { Stagehand } from "@browserbasehq/stagehand";
 import type { ConstructorParams, LogLine } from "@browserbasehq/stagehand";
 
-import { AnyZodObject } from "zod";
-import { jsonSchemaToZod } from "./utils.js";
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -57,6 +55,12 @@ const stagehandConfig: ConstructorParams = {
   domSettleTimeoutMs: 30_000 /* Timeout for DOM to settle in milliseconds */,
   browserbaseSessionCreateParams: {
     projectId: process.env.BROWSERBASE_PROJECT_ID!,
+    browserSettings: process.env.CONTEXT_ID ? {
+        context: {
+          id: process.env.CONTEXT_ID,
+          persist: true
+        }
+    } : undefined
   },
   enableCaching: true /* Enable caching functionality */,
   browserbaseSessionID:
