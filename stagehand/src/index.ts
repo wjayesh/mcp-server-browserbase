@@ -262,7 +262,7 @@ async function handleToolCall(
           content: [
             {
               type: "text",
-              text: `Navigateddfsfsrsg to: ${args.url} with context id: ${process.env.CONTEXT_ID}`,
+              text: `Navigated to: ${args.url}`,
             },
           ],
           isError: false,
