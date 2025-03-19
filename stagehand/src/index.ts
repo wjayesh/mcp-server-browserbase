@@ -138,16 +138,10 @@ const TOOLS: Tool[] = [
     description: "Takes a screenshot of the current page. Use this tool to learn where you are on the page when controlling the browser with Stagehand. Only use this tool when the other tools are not sufficient to get the information you need.",
     inputSchema: {
       type: "object",
-      properties: {
-        fullPage: { 
-          type: "boolean", 
-          description: "Whether to take a screenshot of the full page (true) or just the visible viewport (false). Default is false." 
-        }
-      }
+      properties: {},
     },
   },
 ];
-
 // Global state
 let stagehand: Stagehand | undefined;
 let serverInstance: Server | undefined;
@@ -400,7 +394,7 @@ async function handleToolCall(
       try {
        
         const screenshotBuffer = await stagehand.page.screenshot({ 
-          fullPage: args.fullPage 
+          fullPage: false 
         });
         
         // Convert buffer to base64 string and store in memory
