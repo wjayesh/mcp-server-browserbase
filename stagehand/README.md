@@ -64,14 +64,9 @@ A Model Context Protocol (MCP) server that provides AI-powered web automation ca
 
 ### Resources
 
-The server provides access to two types of resources:
+The server provides access to one resource:
 
-1. **Console Logs** (`console://logs`)
-
-   - Browser console output in text format
-   - Includes all console messages from the browser
-
-2. **Screenshots** (`screenshot://<name>`)
+   **Screenshots** (`screenshot://<name>`)
    - PNG images of captured screenshots
    - Accessible via the screenshot name specified during capture
 
