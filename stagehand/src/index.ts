@@ -257,7 +257,6 @@ async function handleToolCall(
     case "stagehand_navigate":
       try {
         await stagehand.page.goto(args.url);
-        console.log(process.env.CONTEXT_ID);
         return {
           content: [
             {
