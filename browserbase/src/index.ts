@@ -29,7 +29,7 @@ Object.entries(requiredEnvVars).forEach(([name, value]) => {
 // 2. Global State
 const browsers = new Map<string, { browser: Browser; page: Page }>();
 const consoleLogs: string[] = [];
-// const screenshots = new Map<string, string>();
+const screenshots = new Map<string, string>();
 // Global state variable for the default browser session
 let defaultBrowserSession: { browser: Browser; page: Page } | null = null;
 const sessionId = "default"; // Using a consistent session ID for the default session
@@ -220,6 +220,29 @@ const TOOLS: Tool[] = [
     },
   },
   {
+    name: "browserbase_screenshot",
+    description:
+      "Takes a screenshot of the current page. Use this tool to learn where you are on the page when controlling the browser. Use this tool when the other tools are not sufficient enough to get the information you need.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        selector: {
+          type: "string",
+          description: "CSS selector for element to screenshot (optional)",
+        },
+        width: {
+          type: "number",
+          description: "Width in pixels (default: 800)",
+        },
+        height: {
+          type: "number",
+          description: "Height in pixels (default: 600)",
+        },
+      },
+      required: [],
+    },
+  },
+  {
     name: "browserbase_click",
     description: "Click an element on the page",
     inputSchema: {
@@ -269,7 +292,7 @@ const TOOLS: Tool[] = [
           type: "string",
           description:
             "Optional CSS selector to get content from specific elements (default: returns whole page). Only use this tool when explicitly asked to extract content from a specific page.",
-        }
+        },
       },
       required: [],
     },
@@ -347,6 +370,75 @@ async function handleToolCall(
           ],
           isError: false,
         };
+      case "browserbase_screenshot":
+        try {
+          const width = args.width ?? 800;
+          const height = args.height ?? 600;
+          await session!.page.setViewport({ width, height });
+
+          // Take screenshot
+          const screenshotBase64 = await (args.selector
+            ? (
+                await session!.page.$(args.selector)
+              )?.screenshot({ encoding: "base64" })
+            : session!.page.screenshot({
+                encoding: "base64",
+                fullPage: false,
+              }));
+
+          if (!screenshotBase64) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: args.selector
+                    ? `Element not found: ${args.selector}`
+                    : "Screenshot failed",
+                },
+              ],
+              isError: true,
+            };
+          }
+
+          // Store screenshot
+          const name = `screenshot-${new Date()
+            .toISOString()
+            .replace(/:/g, "-")}`;
+          screenshots.set(name, screenshotBase64 as string);
+
+          // Notify client that resources list has changed
+          server.notification({
+            method: "notifications/resources/list_changed",
+          });
+
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Screenshot taken with name: ${name}`,
+              },
+              {
+                type: "image",
+                data: screenshotBase64,
+                mimeType: "image/png",
+              },
+            ],
+            isError: false,
+          };
+        } catch (error) {
+          const errorMsg =
+            error instanceof Error ? error.message : String(error);
+          log(`Failed to take screenshot: ${errorMsg}`, "error");
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Failed to take screenshot: ${errorMsg}`,
+              },
+            ],
+            isError: true,
+          };
+        }
       case "browserbase_click":
         try {
           await session!.page.click(args.selector);
@@ -599,6 +691,27 @@ async function handleToolCall(
   }
 }
 
+// Add this helper function
+function sanitizeJSON(data: any): any {
+  try {
+    // If it's already a string, validate it
+    if (typeof data === "string") {
+      return JSON.stringify(JSON.parse(data));
+    }
+    // Otherwise stringify the object
+    return JSON.stringify(data);
+  } catch (error) {
+    console.error("JSON sanitization error:", error);
+    // Return a safe error response
+    return JSON.stringify({
+      error: {
+        code: -32700,
+        message: "Parse error",
+      },
+    });
+  }
+}
+
 // 6. Server Setup and Configuration
 const server = new Server(
   {
@@ -614,30 +727,86 @@ const server = new Server(
 );
 
 // 7. Request Handlers
-server.setRequestHandler(ListResourcesRequestSchema, async () => ({
-  resources: [
-    {
-      uri: "console://logs",
-      mimeType: "text/plain",
-      name: "Browser console logs",
-    },
-  ],
-}));
-
-server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
-  const uri = request.params.uri.toString();
-  if (uri === "console://logs") {
-    return {
-      contents: [
+server.setRequestHandler(ListResourcesRequestSchema, async () => {
+  try {
+    const resources = {
+      resources: [
         {
-          uri,
+          uri: "console://logs",
           mimeType: "text/plain",
-          text: consoleLogs.join("\n"),
+          name: "Browser console logs",
         },
+        ...Array.from(screenshots.keys()).map((name) => ({
+          uri: `screenshot://${name}`,
+          mimeType: "image/png",
+          name: `Screenshot: ${name}`,
+        })),
       ],
     };
+
+    // Sanitize before returning
+    return JSON.parse(sanitizeJSON(resources));
+  } catch (error) {
+    log(
+      `Error in ListResourcesRequestSchema: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+      "error"
+    );
+    return {
+      resources: [], // Always return valid structure
+    };
   }
-  throw new Error(`Resource not found: ${uri}`);
+});
+
+server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+  try {
+    const uri = request.params.uri.toString();
+    if (uri === "console://logs") {
+      return {
+        contents: [
+          {
+            uri,
+            mimeType: "text/plain",
+            text: consoleLogs.join("\n"),
+          },
+        ],
+      };
+    }
+
+    if (uri.startsWith("screenshot://")) {
+      const name = uri.split("://")[1];
+      const screenshot = screenshots.get(name);
+      if (screenshot) {
+        return {
+          contents: [
+            {
+              uri,
+              mimeType: "image/png",
+              blob: screenshot,
+            },
+          ],
+        };
+      }
+    }
+
+    throw new Error(`Resource not found: ${uri}`);
+  } catch (error) {
+    log(
+      `Error in ReadResourceRequestSchema: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+      "error"
+    );
+    return {
+      error: {
+        code: -32603,
+        message: `Internal error: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      },
+    };
+  }
 });
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
