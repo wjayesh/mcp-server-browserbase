@@ -34,9 +34,6 @@ const screenshots = new Map<string, string>();
 let defaultBrowserSession: { browser: Browser; page: Page } | null = null;
 const sessionId = "default"; // Using a consistent session ID for the default session
 
-// Flag to track if the server is fully initialized
-let serverInitialized = false;
-
 // Ensure browser session is initialized and valid
 async function ensureBrowserSession(): Promise<{
   browser: Browser;
@@ -161,8 +158,8 @@ function log(message: string, level: "info" | "error" | "debug" = "info") {
   // Console output
   console[level === "error" ? "error" : "log"](logMessage);
 
-  // Only send notification if server is initialized
-  if (server && serverInitialized) {
+  // Send notification if server is initialized
+  if (server) {
     server.notification({
       method: "notifications/cloud/message",
       params: { message: logMessage, type: level },
@@ -824,7 +821,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) =>
 async function runServer() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  serverInitialized = true;
 }
 
 runServer().catch(console.error);
