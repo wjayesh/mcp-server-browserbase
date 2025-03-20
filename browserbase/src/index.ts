@@ -208,17 +208,6 @@ const TOOLS: Tool[] = [
       required: [],
     },
   },
-  // {
-  //   name: "browserbase_close_session",
-  //   description: "Close a browser session on Browserbase",
-  //   inputSchema: {
-  //     type: "object",
-  //     properties: {
-  //       sessionId: { type: "string" },
-  //     },
-  //     required: ["sessionId"],
-  //   },
-  // },
   {
     name: "browserbase_navigate",
     description: "Navigate to a URL",
@@ -230,29 +219,6 @@ const TOOLS: Tool[] = [
       required: ["url"],
     },
   },
-  // {
-  //   name: "browserbase_screenshot",
-  //   description: "Take a screenshot of the current page or a specific element",
-  //   inputSchema: {
-  //     type: "object",
-  //     properties: {
-  //       name: { type: "string", description: "Name for the screenshot" },
-  //       selector: {
-  //         type: "string",
-  //         description: "CSS selector for element to screenshot",
-  //       },
-  //       width: {
-  //         type: "number",
-  //         description: "Width in pixels (default: 800)",
-  //       },
-  //       height: {
-  //         type: "number",
-  //         description: "Height in pixels (default: 600)",
-  //       },
-  //     },
-  //     required: ["name"],
-  //   },
-  // },
   {
     name: "browserbase_click",
     description: "Click an element on the page",
@@ -344,12 +310,6 @@ async function handleToolCall(
     }
 
     switch (name) {
-      // case "browserbase_close_session":
-      //   await defaultSession!.browser.close();
-      //   browsers.delete(args.sessionId);
-      //   return {
-      //     content: [{ type: "text", text: "Closed session" }],
-      //   };
       case "browserbase_create_session":
         try {
           // Create or verify the default session
@@ -387,50 +347,6 @@ async function handleToolCall(
           ],
           isError: false,
         };
-      case "browserbase_screenshot": {
-        const width = args.width ?? 800;
-        const height = args.height ?? 600;
-        await session!.page.setViewport({ width, height });
-        const screenshot = await (args.selector
-          ? (
-              await session!.page.$(args.selector)
-            )?.screenshot({ encoding: "base64" })
-          : session!.page.screenshot({
-              encoding: "base64",
-              fullPage: false,
-            }));
-        if (!screenshot) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: args.selector
-                  ? `Element not found: ${args.selector}`
-                  : "Screenshot failed",
-              },
-            ],
-            isError: true,
-          };
-        }
-        // screenshots.set(args.name, screenshot as string);
-        server.notification({
-          method: "notifications/resources/list_changed",
-        });
-        return {
-          content: [
-            // {
-            //   type: "text",
-            //   text: `Screenshot '${args.name}' taken at ${width}x${height}`,
-            // } as TextContent,
-            // {
-            //   type: "image",
-            //   data: screenshot,
-            //   mimeType: "image/png",
-            // } as ImageContent,
-          ],
-          isError: false,
-        };
-      }
       case "browserbase_click":
         try {
           await session!.page.click(args.selector);
@@ -705,11 +621,6 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => ({
       mimeType: "text/plain",
       name: "Browser console logs",
     },
-    // ...Array.from(screenshots.keys()).map((name) => ({
-    //   uri: `screenshot://${name}`,
-    //   mimeType: "image/png",
-    //   name: `Screenshot: ${name}`,
-    // })),
   ],
 }));
 
@@ -726,21 +637,6 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
       ],
     };
   }
-  // if (uri.startsWith("screenshot://")) {
-  //   const name = uri.split("://")[1];
-  //   const screenshot = screenshots.get(name);
-  //   if (screenshot) {
-  //     return {
-  //       contents: [
-  //         {
-  //           uri,
-  //           mimeType: "image/png",
-  //           blob: screenshot,
-  //         },
-  //       ],
-  //     };
-  //   }
-  // }
   throw new Error(`Resource not found: ${uri}`);
 });
 
