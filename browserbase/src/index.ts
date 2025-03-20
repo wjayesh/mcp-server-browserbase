@@ -155,17 +155,6 @@ const TOOLS: Tool[] = [
     },
   },
   {
-    name: "browserbase_close_session",
-    description: "Close a browser session on Browserbase",
-    inputSchema: {
-      type: "object",
-      properties: {
-        sessionId: { type: "string" },
-      },
-      required: ["sessionId"],
-    },
-  },
-  {
     name: "browserbase_navigate",
     description: "Navigate to a URL",
     inputSchema: {
@@ -257,12 +246,6 @@ async function handleToolCall(
     }
 
     switch (name) {
-      case "browserbase_close_session":
-        await session!.browser.close();
-        browsers.delete(args.sessionId);
-        return {
-            content: [{ type: "text", text: "Closed session" }],
-        };
       case "browserbase_create_session":
         try {
           // Check if session already exists
@@ -313,23 +296,19 @@ async function handleToolCall(
         };
 
       case "browserbase_screenshot": {
-        const screenshot = await (args.selector
-          ? (
-              await session!.page.$(args.selector)
-            )?.screenshot({ encoding: "base64" })
-          : session!.page.screenshot({
-              encoding: "base64",
-              fullPage: false,
-            }));
+        
+        const screenshot = await session!.page.screenshot({
+          encoding: "base64",
+          fullPage: false,
+
+        });
 
         if (!screenshot) {
           return {
             content: [
               {
                 type: "text",
-                text: args.selector
-                  ? `Element not found: ${args.selector}`
-                  : "Screenshot failed",
+                text: "Screenshot failed",
               },
             ],
             isError: true,
@@ -345,7 +324,7 @@ async function handleToolCall(
           content: [
             {
               type: "text",
-              text: `Screenshot  taken `,
+              text: `Screenshot taken`,
             } as TextContent,
             {
               type: "image",
