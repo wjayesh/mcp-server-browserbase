@@ -31,6 +31,11 @@ export function setServerInstance(server: Server) {
   serverInstance = server;
 }
 
+// Get server instance for notifications and logging
+export function getServerInstance() {
+  return serverInstance;
+}
+
 // Ensure log directory exists
 export function ensureLogDirectory() {
   if (!fs.existsSync(LOG_DIR)) {

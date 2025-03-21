@@ -2,10 +2,11 @@ import { Stagehand } from "@browserbasehq/stagehand";
 import { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 import { AnyZodObject } from "zod";
 import { jsonSchemaToZod } from "./utils.js";
-import { formatLogResponse, log, operationLogs } from "./logging.js";
+import { getServerInstance, operationLogs } from "./logging.js";
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { screenshots } from "./resources.js";
 
 // Get the directory name for the current module
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -50,97 +51,10 @@ export const TOOLS: Tool[] = [
   },
   {
     name: "stagehand_extract",
-    description: `Extracts structured data from the web page based on an instruction and a JSON schema (Zod schema). Extract works best for extracting TEXT in a structured format.`,
+    description: `Extracts all of the text from the current page.`,
     inputSchema: {
       type: "object",
-      description: `**Instructions for providing the schema:**
-  
-  - The \`schema\` should be a valid JSON Schema (Zod) object that defines the structure of the data to extract.
-  - Use standard JSON Schema syntax.
-  - The server will convert the JSON Schema to a Zod schema internally.
-  
-  **Example schemas:**
-  
-  1. **Extracting a list of search result titles:**
-  
-  \`\`\`json
-  {
-    "type": "object",
-    "properties": {
-      "searchResults": {
-        "type": "array",
-        "items": {
-          "type": "string",
-          "description": "Title of a search result"
-        }
-      }
-    },
-    "required": ["searchResults"]
-  }
-  \`\`\`
-  
-  2. **Extracting product details:**
-  
-  \`\`\`json
-  {
-    "type": "object",
-    "properties": {
-      "name": { "type": "string" },
-      "price": { "type": "string" },
-      "rating": { "type": "number" },
-      "reviews": {
-        "type": "array",
-        "items": { "type": "string" }
-      }
-    },
-    "required": ["name", "price", "rating", "reviews"]
-  }
-  \`\`\`
-  
-  **Example usage:**
-  
-  - **Instruction**: "Extract the titles and URLs of the main search results, excluding any ads."
-  - **Schema**:
-    \`\`\`json
-    {
-      "type": "object",
-      "properties": {
-        "results": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "title": { "type": "string", "description": "The title of the search result" },
-              "url": { "type": "string", "description": "The URL of the search result" }
-            },
-            "required": ["title", "url"]
-          }
-        }
-      },
-      "required": ["results"]
-    }
-    \`\`\`
-  
-  **Note:**
-  
-  - Ensure the schema is valid JSON.
-  - Use standard JSON Schema types like \`string\`, \`number\`, \`array\`, \`object\`, etc.
-  - You can add descriptions to help clarify the expected data.
-  `,
-      properties: {
-        instruction: {
-          type: "string",
-          description:
-            "Clear instruction for what data to extract from the page",
-        },
-        schema: {
-          type: "object",
-          description:
-            "A JSON Schema object defining the structure of data to extract",
-          additionalProperties: true,
-        },
-      },
-      required: ["instruction", "schema"],
+      properties: {},
     },
   },
   {
@@ -159,19 +73,10 @@ export const TOOLS: Tool[] = [
   },
   {
     name: "screenshot",
-    description: "Take a screenshot of the current page. Use this tool to learn where you are on the page when controlling the browser with Stagehand.",
+    description: "Takes a screenshot of the current page. Use this tool to learn where you are on the page when controlling the browser with Stagehand. Only use this tool when the other tools are not sufficient to get the information you need.",
     inputSchema: {
       type: "object",
-      properties: {
-        fullPage: { 
-          type: "boolean", 
-          description: "Whether to take a screenshot of the full page (true) or just the visible viewport (false). Default is false." 
-        },
-        path: {
-          type: "string",
-          description: "Optional. Custom file path where the screenshot should be saved. If not provided, a default path will be used."
-        }
-      }
+      properties: {},
     },
   },
 ];
@@ -192,6 +97,10 @@ export async function handleToolCall(
               type: "text",
               text: `Navigated to: ${args.url}`,
             },
+            {
+              type: "text",
+              text: `View the live session here: https://browserbase.com/sessions/${stagehand.browserbaseSessionID}`,
+            },
           ],
           isError: false,
         };
@@ -205,7 +114,7 @@ export async function handleToolCall(
             },
             {
               type: "text",
-              text: `Operation logs:\n${formatLogResponse(operationLogs)}`,
+              text: `Operation logs:\n${operationLogs.join("\n")}`,
             },
           ],
           isError: true,
@@ -238,48 +147,60 @@ export async function handleToolCall(
             },
             {
               type: "text",
-              text: `Operation logs:\n${formatLogResponse(operationLogs)}`,
+              text: `Operation logs:\n${operationLogs.join("\n")}`,
             },
           ],
           isError: true,
         };
       }
 
-    case "stagehand_extract":
+    case "stagehand_extract": {
       try {
-        // Convert the JSON schema from args.schema to a zod schema
-        const zodSchema = jsonSchemaToZod(args.schema) as AnyZodObject;
-        const data = await stagehand.page.extract({
-          instruction: args.instruction,
-          schema: zodSchema,
-          useTextExtract: true,
-        });
-        log(`Extraction result: ${JSON.stringify(data)}`, 'info');
+        const bodyText = await stagehand.page.evaluate(() => document.body.innerText);
+        const content = bodyText
+          .split('\n')
+          .map(line => line.trim())
+          .filter(line => {
+            if (!line) return false;
+            
+            if (
+                (line.includes('{') && line.includes('}')) ||         
+                line.includes('@keyframes') ||                         // Remove CSS animations
+                line.match(/^\.[a-zA-Z0-9_-]+\s*{/) ||               // Remove CSS lines starting with .className {
+                line.match(/^[a-zA-Z-]+:[a-zA-Z0-9%\s\(\)\.,-]+;$/)  // Remove lines like "color: blue;" or "margin: 10px;"
+              ) {
+              return false;
+            }
+            return true;
+          })
+          .map(line => {
+            return line.replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) => 
+              String.fromCharCode(parseInt(hex, 16))
+            );
+          });
+        
         return {
           content: [
             {
               type: "text",
-              text: `Extraction result: ${JSON.stringify(data)}`,
-            }
+              text: `Extracted content:\n${content.join('\n')}`,
+            },
           ],
           isError: false,
         };
       } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : String(error);
         return {
           content: [
             {
               type: "text",
-              text: `Failed to extract: ${errorMsg}`,
-            },
-            {
-              type: "text",
-              text: `Operation logs:\n${formatLogResponse(operationLogs)}`,
+              text: `Failed to extract content: ${(error as Error).message}`,
             },
           ],
           isError: true,
         };
       }
+    }
+
     case "stagehand_observe":
       try {
         const observations = await stagehand.page.observe({
@@ -305,7 +226,7 @@ export async function handleToolCall(
             },
             {
               type: "text",
-              text: `Operation logs:\n${formatLogResponse(operationLogs)}`,
+              text: `Operation logs:\n${operationLogs.join("\n")}`,
             },
           ],
           isError: true,
@@ -314,34 +235,33 @@ export async function handleToolCall(
 
     case "screenshot":
       try {
-        const fullPage = args.fullPage === true;
+        const screenshotBuffer = await stagehand.page.screenshot({ 
+          fullPage: false 
+        });
         
-        // Create a screenshots directory next to the logs directory
-        const SCREENSHOTS_DIR = path.join(__dirname, '../screenshots');
-        if (!fs.existsSync(SCREENSHOTS_DIR)) {
-          fs.mkdirSync(SCREENSHOTS_DIR, { recursive: true });
+        // Convert buffer to base64 string and store in memory
+        const screenshotBase64 = screenshotBuffer.toString('base64');
+        const name = `screenshot-${new Date().toISOString().replace(/:/g, '-')}`;
+        screenshots.set(name, screenshotBase64);
+        
+        // Notify the client that the resources changed
+        const serverInstance = getServerInstance();
+        if (serverInstance) {
+          serverInstance.notification({
+            method: "notifications/resources/list_changed",
+          });
         }
-        
-        // Generate a filename based on timestamp if path not provided
-        const screenshotPath = args.path || path.join(SCREENSHOTS_DIR, `screenshot-${new Date().toISOString().replace(/:/g, '-')}.png`);
-        
-        // If a custom path is provided, ensure its directory exists
-        if (args.path) {
-          const customDir = path.dirname(screenshotPath);
-          if (!fs.existsSync(customDir)) {
-            fs.mkdirSync(customDir, { recursive: true });
-          }
-        }
-        
-        // Take the screenshot
-        // making fullpage false temporarily
-        await stagehand.page.screenshot({ path: screenshotPath, fullPage: false });
         
         return {
           content: [
             {
               type: "text",
-              text: `Screenshot taken and saved to: ${screenshotPath}`,
+              text: `Screenshot taken with name: ${name}`,
+            },
+            {
+              type: "image",
+              data: screenshotBase64,
+              mimeType: "image/png",
             },
           ],
           isError: false,
@@ -356,7 +276,7 @@ export async function handleToolCall(
             },
             {
               type: "text",
-              text: `Operation logs:\n${formatLogResponse(operationLogs)}`,
+              text: `Operation logs:\n${operationLogs.join("\n")}`,
             },
           ],
           isError: true,
@@ -372,7 +292,7 @@ export async function handleToolCall(
           },
           {
             type: "text",
-            text: `Operation logs:\n${formatLogResponse(operationLogs)}`,
+            text: `Operation logs:\n${operationLogs.join("\n")}`,
           },
         ],
         isError: true,

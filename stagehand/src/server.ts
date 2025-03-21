@@ -5,7 +5,8 @@ import {
   ListResourcesRequestSchema, 
   ListResourceTemplatesRequestSchema,
   ListPromptsRequestSchema,
-  GetPromptRequestSchema
+  GetPromptRequestSchema,
+  ReadResourceRequestSchema
 } from "@modelcontextprotocol/sdk/types.js";
 import { Stagehand } from "@browserbasehq/stagehand";
 import type { ConstructorParams } from "@browserbasehq/stagehand";
@@ -14,7 +15,7 @@ import { sanitizeMessage } from "./utils.js";
 import { log, logRequest, logResponse, operationLogs, setServerInstance } from "./logging.js";
 import { TOOLS, handleToolCall } from "./tools.js";
 import { PROMPTS, getPrompt } from "./prompts.js";
-import { listResources, listResourceTemplates } from "./resources.js";
+import { listResources, listResourceTemplates, readResource } from "./resources.js";
 
 // Define Stagehand configuration
 export const stagehandConfig: ConstructorParams = {
@@ -31,6 +32,12 @@ export const stagehandConfig: ConstructorParams = {
   domSettleTimeoutMs: 30_000 /* Timeout for DOM to settle in milliseconds */,
   browserbaseSessionCreateParams: {
     projectId: process.env.BROWSERBASE_PROJECT_ID!,
+    browserSettings: process.env.CONTEXT_ID ? {
+        context: {
+          id: process.env.CONTEXT_ID,
+          persist: true
+        }
+    } : undefined
   },
   enableCaching: true /* Enable caching functionality */,
   browserbaseSessionID:
@@ -47,11 +54,35 @@ let stagehand: Stagehand | undefined;
 
 // Ensure Stagehand is initialized
 export async function ensureStagehand() {
-  if (!stagehand) {
-    stagehand = new Stagehand(stagehandConfig);
-    await stagehand.init();
+  try {
+    if (!stagehand) {
+      stagehand = new Stagehand(stagehandConfig);
+      await stagehand.init();
+      return stagehand;
+    }
+
+    // Try to perform a simple operation to check if the session is still valid
+    try {
+      await stagehand.page.evaluate(() => document.title);
+      return stagehand;
+    } catch (error) {
+      // If we get an error indicating the session is invalid, reinitialize
+      if (error instanceof Error && 
+          (error.message.includes('Target page, context or browser has been closed') ||
+           error.message.includes('Session expired') ||
+           error.message.includes('context destroyed'))) {
+        log('Browser session expired, reinitializing Stagehand...', 'info');
+        stagehand = new Stagehand(stagehandConfig);
+        await stagehand.init();
+        return stagehand;
+      }
+      throw error; // Re-throw if it's a different type of error
+    }
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    log(`Failed to initialize/reinitialize Stagehand: ${errorMsg}`, 'error');
+    throw error;
   }
-  return stagehand;
 }
 
 // Create the server
@@ -115,7 +146,7 @@ export function createServer() {
             },
             {
               type: "text",
-              text: `Operation logs:\n${formatLogResponse(operationLogs)}`,
+              text: `Operation logs:\n${operationLogs.join("\n")}`,
             },
           ],
           isError: true,
@@ -145,7 +176,6 @@ export function createServer() {
   server.setRequestHandler(ListResourcesRequestSchema, async (request) => {
     try {
       logRequest('ListResources', request.params);
-      // Return an empty list since we don't have any resources defined
       const response = listResources();
       const sanitizedResponse = sanitizeMessage(response);
       logResponse('ListResources', JSON.parse(sanitizedResponse));
@@ -164,10 +194,28 @@ export function createServer() {
   server.setRequestHandler(ListResourceTemplatesRequestSchema, async (request) => {
     try {
       logRequest('ListResourceTemplates', request.params);
-      // Return an empty list since we don't have any resource templates defined
       const response = listResourceTemplates();
       const sanitizedResponse = sanitizeMessage(response);
       logResponse('ListResourceTemplates', JSON.parse(sanitizedResponse));
+      return JSON.parse(sanitizedResponse);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      return {
+        error: {
+          code: -32603,
+          message: `Internal error: ${errorMsg}`,
+        },
+      };
+    }
+  });
+
+  server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+    try {
+      logRequest('ReadResource', request.params);
+      const uri = request.params.uri.toString();
+      const response = readResource(uri);
+      const sanitizedResponse = sanitizeMessage(response);
+      logResponse('ReadResource', JSON.parse(sanitizedResponse));
       return JSON.parse(sanitizedResponse);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
