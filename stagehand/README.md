@@ -55,10 +55,7 @@ A Model Context Protocol (MCP) server that provides AI-powered web automation ca
     - `variables` (object, optional): Variables used in the action template
 
 - **stagehand_extract**
-  - Extract data from the web page based on an instruction and schema
-  - Inputs:
-    - `instruction` (string): Instruction for extraction (e.g., "extract the price of the item")
-    - `schema` (object): JSON schema for the extracted data
+  - Extract data from the web page 
 
 - **stagehand_observe**
   - Observe actions that can be performed on the web page
@@ -67,7 +64,7 @@ A Model Context Protocol (MCP) server that provides AI-powered web automation ca
 
 ### Resources
 
-The server provides access to two types of resources:
+The server provides access to one resource:
 
 1. **Console Logs** (`console://logs`)
 
