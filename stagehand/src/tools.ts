@@ -1,15 +1,7 @@
 import { Stagehand } from "@browserbasehq/stagehand";
 import { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
-import { AnyZodObject } from "zod";
-import { jsonSchemaToZod } from "./utils.js";
 import { getServerInstance, operationLogs } from "./logging.js";
-import path from 'path';
-import fs from 'fs';
-import { fileURLToPath } from 'url';
 import { screenshots } from "./resources.js";
-
-// Get the directory name for the current module
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Define the Stagehand tools
 export const TOOLS: Tool[] = [
