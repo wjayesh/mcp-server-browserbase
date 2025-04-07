@@ -66,9 +66,7 @@ export const stagehandConfig: ConstructorParams = {
   modelClientOptions: {
     apiKey: process.env.OPENAI_API_KEY,
   } /* Configuration options for the model client */,
-  useAPI: !!(
-    process.env.BROWSERBASE_API_KEY && process.env.BROWSERBASE_PROJECT_ID
-  ),
+  useAPI: false,
 };
 
 // Global state
