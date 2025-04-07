@@ -40,17 +40,20 @@ export const stagehandConfig: ConstructorParams = {
       logLineToString(message)
     ) /* Custom logging function to stderr */,
   domSettleTimeoutMs: 30_000 /* Timeout for DOM to settle in milliseconds */,
-  browserbaseSessionCreateParams: {
-    projectId: process.env.BROWSERBASE_PROJECT_ID!,
-    browserSettings: process.env.CONTEXT_ID
+  browserbaseSessionCreateParams:
+    process.env.BROWSERBASE_API_KEY && process.env.BROWSERBASE_PROJECT_ID
       ? {
-          context: {
-            id: process.env.CONTEXT_ID,
-            persist: true,
-          },
+          projectId: process.env.BROWSERBASE_PROJECT_ID!,
+          browserSettings: process.env.CONTEXT_ID
+            ? {
+                context: {
+                  id: process.env.CONTEXT_ID,
+                  persist: true,
+                },
+              }
+            : undefined,
         }
       : undefined,
-  },
   localBrowserLaunchOptions: process.env.LOCAL_CDP_URL
     ? {
         cdpUrl: process.env.LOCAL_CDP_URL,
@@ -168,7 +171,11 @@ export function createServer() {
           content: [
             {
               type: "text",
-              text: `Failed to initialize Stagehand: ${errorMsg}`,
+              text: `Failed to initialize Stagehand: ${errorMsg}. Config: ${JSON.stringify(
+                stagehandConfig,
+                null,
+                2
+              )}`,
             },
             {
               type: "text",
