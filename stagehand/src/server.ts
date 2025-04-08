@@ -74,6 +74,15 @@ let stagehand: Stagehand | undefined;
 
 // Ensure Stagehand is initialized
 export async function ensureStagehand() {
+  if (
+    stagehandConfig.env === "LOCAL" &&
+    !stagehandConfig.localBrowserLaunchOptions?.cdpUrl
+  ) {
+    throw new Error(
+      'Using a local browser without providing a CDP URL is not supported. Please provide a CDP URL using the LOCAL_CDP_URL environment variable.\n\nTo launch your browser in "debug", see our documentation.\n\nhttps://docs.stagehand.dev/examples/customize_browser#use-your-personal-browser'
+    );
+  }
+
   try {
     if (!stagehand) {
       stagehand = new Stagehand(stagehandConfig);
@@ -169,7 +178,7 @@ export function createServer() {
           content: [
             {
               type: "text",
-              text: `Failed to initialize Stagehand: ${errorMsg}. Config: ${JSON.stringify(
+              text: `Failed to initialize Stagehand: ${errorMsg}.\n\nConfig: ${JSON.stringify(
                 stagehandConfig,
                 null,
                 2
