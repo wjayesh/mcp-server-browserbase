@@ -20,11 +20,28 @@ A Model Context Protocol (MCP) server that provides AI-powered web automation ca
         "BROWSERBASE_API_KEY": "<YOUR_BROWSERBASE_API_KEY>",
         "BROWSERBASE_PROJECT_ID": "<YOUR_BROWSERBASE_PROJECT_ID>",
         "OPENAI_API_KEY": "<YOUR_OPENAI_API_KEY>",
+        "CONTEXT_ID": "<YOUR_CONTEXT_ID>"
       }
     }
   }
 }
 ```
+or, for running locally:
+```json
+{
+  "mcpServers": {
+    "stagehand": {
+      "command": "node",
+      "args": ["path/to/mcp-server-browserbase/stagehand/dist/index.js"],
+      "env": {
+        "OPENAI_API_KEY": "<YOUR_OPENAI_API_KEY>",
+        "LOCAL_CDP_URL": "<YOUR_LOCAL_CDP_URL>"
+      }
+    }
+  }
+}
+```
+> 💡 Check out our [documentation](https://docs.stagehand.dev/examples/customize_browser#use-your-personal-browser) for getting your local CDP url!
 
 3. Restart your Claude Desktop app and you should see the tools available clicking the 🔨 icon.
 
