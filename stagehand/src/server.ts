@@ -2,20 +2,30 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
-  ListResourcesRequestSchema, 
+  ListResourcesRequestSchema,
   ListResourceTemplatesRequestSchema,
   ListPromptsRequestSchema,
   GetPromptRequestSchema,
-  ReadResourceRequestSchema
+  ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { Stagehand } from "@browserbasehq/stagehand";
 import type { ConstructorParams } from "@browserbasehq/stagehand";
 
 import { sanitizeMessage } from "./utils.js";
-import { log, logRequest, logResponse, operationLogs, setServerInstance } from "./logging.js";
+import {
+  log,
+  logRequest,
+  logResponse,
+  operationLogs,
+  setServerInstance,
+} from "./logging.js";
 import { TOOLS, handleToolCall } from "./tools.js";
 import { PROMPTS, getPrompt } from "./prompts.js";
-import { listResources, listResourceTemplates, readResource } from "./resources.js";
+import {
+  listResources,
+  listResourceTemplates,
+  readResource,
+} from "./resources.js";
 
 // Define Stagehand configuration
 export const stagehandConfig: ConstructorParams = {
@@ -25,20 +35,30 @@ export const stagehandConfig: ConstructorParams = {
       : "LOCAL",
   apiKey: process.env.BROWSERBASE_API_KEY /* API key for authentication */,
   projectId: process.env.BROWSERBASE_PROJECT_ID /* Project identifier */,
-  debugDom: false /* Enable DOM debugging features */,
-  headless: false /* Run browser in headless mode */,
   logger: (message) =>
-    console.error(logLineToString(message)) /* Custom logging function to stderr */,
+    console.error(
+      logLineToString(message)
+    ) /* Custom logging function to stderr */,
   domSettleTimeoutMs: 30_000 /* Timeout for DOM to settle in milliseconds */,
-  browserbaseSessionCreateParams: {
-    projectId: process.env.BROWSERBASE_PROJECT_ID!,
-    browserSettings: process.env.CONTEXT_ID ? {
-        context: {
-          id: process.env.CONTEXT_ID,
-          persist: true
+  browserbaseSessionCreateParams:
+    process.env.BROWSERBASE_API_KEY && process.env.BROWSERBASE_PROJECT_ID
+      ? {
+          projectId: process.env.BROWSERBASE_PROJECT_ID!,
+          browserSettings: process.env.CONTEXT_ID
+            ? {
+                context: {
+                  id: process.env.CONTEXT_ID,
+                  persist: true,
+                },
+              }
+            : undefined,
         }
-    } : undefined
-  },
+      : undefined,
+  localBrowserLaunchOptions: process.env.LOCAL_CDP_URL
+    ? {
+        cdpUrl: process.env.LOCAL_CDP_URL,
+      }
+    : undefined,
   enableCaching: true /* Enable caching functionality */,
   browserbaseSessionID:
     undefined /* Session ID for resuming Browserbase sessions */,
@@ -54,6 +74,15 @@ let stagehand: Stagehand | undefined;
 
 // Ensure Stagehand is initialized
 export async function ensureStagehand() {
+  if (
+    stagehandConfig.env === "LOCAL" &&
+    !stagehandConfig.localBrowserLaunchOptions?.cdpUrl
+  ) {
+    throw new Error(
+      'Using a local browser without providing a CDP URL is not supported. Please provide a CDP URL using the LOCAL_CDP_URL environment variable.\n\nTo launch your browser in "debug", see our documentation.\n\nhttps://docs.stagehand.dev/examples/customize_browser#use-your-personal-browser'
+    );
+  }
+
   try {
     if (!stagehand) {
       stagehand = new Stagehand(stagehandConfig);
@@ -67,11 +96,15 @@ export async function ensureStagehand() {
       return stagehand;
     } catch (error) {
       // If we get an error indicating the session is invalid, reinitialize
-      if (error instanceof Error && 
-          (error.message.includes('Target page, context or browser has been closed') ||
-           error.message.includes('Session expired') ||
-           error.message.includes('context destroyed'))) {
-        log('Browser session expired, reinitializing Stagehand...', 'info');
+      if (
+        error instanceof Error &&
+        (error.message.includes(
+          "Target page, context or browser has been closed"
+        ) ||
+          error.message.includes("Session expired") ||
+          error.message.includes("context destroyed"))
+      ) {
+        log("Browser session expired, reinitializing Stagehand...", "info");
         stagehand = new Stagehand(stagehandConfig);
         await stagehand.init();
         return stagehand;
@@ -80,7 +113,7 @@ export async function ensureStagehand() {
     }
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    log(`Failed to initialize/reinitialize Stagehand: ${errorMsg}`, 'error');
+    log(`Failed to initialize/reinitialize Stagehand: ${errorMsg}`, "error");
     throw error;
   }
 }
@@ -97,7 +130,7 @@ export function createServer() {
         resources: {},
         tools: {},
         logging: {},
-        prompts: {}
+        prompts: {},
       },
     }
   );
@@ -108,10 +141,10 @@ export function createServer() {
   // Setup request handlers
   server.setRequestHandler(ListToolsRequestSchema, async (request) => {
     try {
-      logRequest('ListTools', request.params);
+      logRequest("ListTools", request.params);
       const response = { tools: TOOLS };
       const sanitizedResponse = sanitizeMessage(response);
-      logResponse('ListTools', JSON.parse(sanitizedResponse));
+      logResponse("ListTools", JSON.parse(sanitizedResponse));
       return JSON.parse(sanitizedResponse);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -126,10 +159,13 @@ export function createServer() {
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     try {
-      logRequest('CallTool', request.params);
+      logRequest("CallTool", request.params);
       operationLogs.length = 0; // Clear logs for new operation
-      
-      if (!request.params?.name || !TOOLS.find(t => t.name === request.params.name)) {
+
+      if (
+        !request.params?.name ||
+        !TOOLS.find((t) => t.name === request.params.name)
+      ) {
         throw new Error(`Invalid tool name: ${request.params?.name}`);
       }
 
@@ -142,7 +178,11 @@ export function createServer() {
           content: [
             {
               type: "text",
-              text: `Failed to initialize Stagehand: ${errorMsg}`,
+              text: `Failed to initialize Stagehand: ${errorMsg}.\n\nConfig: ${JSON.stringify(
+                stagehandConfig,
+                null,
+                2
+              )}`,
             },
             {
               type: "text",
@@ -160,7 +200,7 @@ export function createServer() {
       );
 
       const sanitizedResult = sanitizeMessage(result);
-      logResponse('CallTool', JSON.parse(sanitizedResult));
+      logResponse("CallTool", JSON.parse(sanitizedResult));
       return JSON.parse(sanitizedResult);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -175,10 +215,10 @@ export function createServer() {
 
   server.setRequestHandler(ListResourcesRequestSchema, async (request) => {
     try {
-      logRequest('ListResources', request.params);
+      logRequest("ListResources", request.params);
       const response = listResources();
       const sanitizedResponse = sanitizeMessage(response);
-      logResponse('ListResources', JSON.parse(sanitizedResponse));
+      logResponse("ListResources", JSON.parse(sanitizedResponse));
       return JSON.parse(sanitizedResponse);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -191,31 +231,34 @@ export function createServer() {
     }
   });
 
-  server.setRequestHandler(ListResourceTemplatesRequestSchema, async (request) => {
-    try {
-      logRequest('ListResourceTemplates', request.params);
-      const response = listResourceTemplates();
-      const sanitizedResponse = sanitizeMessage(response);
-      logResponse('ListResourceTemplates', JSON.parse(sanitizedResponse));
-      return JSON.parse(sanitizedResponse);
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      return {
-        error: {
-          code: -32603,
-          message: `Internal error: ${errorMsg}`,
-        },
-      };
+  server.setRequestHandler(
+    ListResourceTemplatesRequestSchema,
+    async (request) => {
+      try {
+        logRequest("ListResourceTemplates", request.params);
+        const response = listResourceTemplates();
+        const sanitizedResponse = sanitizeMessage(response);
+        logResponse("ListResourceTemplates", JSON.parse(sanitizedResponse));
+        return JSON.parse(sanitizedResponse);
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        return {
+          error: {
+            code: -32603,
+            message: `Internal error: ${errorMsg}`,
+          },
+        };
+      }
     }
-  });
+  );
 
   server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
     try {
-      logRequest('ReadResource', request.params);
+      logRequest("ReadResource", request.params);
       const uri = request.params.uri.toString();
       const response = readResource(uri);
       const sanitizedResponse = sanitizeMessage(response);
-      logResponse('ReadResource', JSON.parse(sanitizedResponse));
+      logResponse("ReadResource", JSON.parse(sanitizedResponse));
       return JSON.parse(sanitizedResponse);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -230,10 +273,10 @@ export function createServer() {
 
   server.setRequestHandler(ListPromptsRequestSchema, async (request) => {
     try {
-      logRequest('ListPrompts', request.params);
+      logRequest("ListPrompts", request.params);
       const response = { prompts: PROMPTS };
       const sanitizedResponse = sanitizeMessage(response);
-      logResponse('ListPrompts', JSON.parse(sanitizedResponse));
+      logResponse("ListPrompts", JSON.parse(sanitizedResponse));
       return JSON.parse(sanitizedResponse);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -248,13 +291,13 @@ export function createServer() {
 
   server.setRequestHandler(GetPromptRequestSchema, async (request) => {
     try {
-      logRequest('GetPrompt', request.params);
-      
+      logRequest("GetPrompt", request.params);
+
       // Check if prompt name is valid and get the prompt
       try {
         const prompt = getPrompt(request.params?.name || "");
         const sanitizedResponse = sanitizeMessage(prompt);
-        logResponse('GetPrompt', JSON.parse(sanitizedResponse));
+        logResponse("GetPrompt", JSON.parse(sanitizedResponse));
         return JSON.parse(sanitizedResponse);
       } catch (error) {
         throw new Error(`Invalid prompt name: ${request.params?.name}`);
@@ -274,4 +317,4 @@ export function createServer() {
 }
 
 // Import missing function from logging
-import { formatLogResponse, logLineToString } from "./logging.js"; 
+import { formatLogResponse, logLineToString } from "./logging.js";
