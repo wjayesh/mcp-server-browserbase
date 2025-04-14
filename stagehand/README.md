@@ -26,7 +26,9 @@ A Model Context Protocol (MCP) server that provides AI-powered web automation ca
   }
 }
 ```
-or, for running locally:
+or, for running locally, first [**open Chrome in debug mode**](https://docs.stagehand.dev/examples/customize_browser#use-your-personal-browser) like so:
+
+`open -a "Google Chrome" --args --remote-debugging-port=9222`
 ```json
 {
   "mcpServers": {
