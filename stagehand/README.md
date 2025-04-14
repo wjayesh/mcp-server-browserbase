@@ -37,7 +37,7 @@ or, for running locally, first [**open Chrome in debug mode**](https://docs.stag
       "args": ["path/to/mcp-server-browserbase/stagehand/dist/index.js"],
       "env": {
         "OPENAI_API_KEY": "<YOUR_OPENAI_API_KEY>",
-        "LOCAL_CDP_URL": "<YOUR_LOCAL_CDP_URL>"
+        "LOCAL_CDP_URL": "http://localhost:9222"
       }
     }
   }
