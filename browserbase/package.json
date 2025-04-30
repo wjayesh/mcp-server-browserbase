@@ -15,14 +15,16 @@
   ],
   "scripts": {
     "build": "tsc && shx chmod +x dist/*.js",
+    "playwright": "tsc && shx chmod +x dist/playwright.js",
     "prepare": "npm run build",
     "watch": "tsc --watch",
     "inspector": "npx @modelcontextprotocol/inspector build/index.js"
   },
   "dependencies": {
     "@browserbasehq/sdk": "^2.0.0",
-		"@modelcontextprotocol/sdk": "^1.10.2",
-    "puppeteer-core": "^23.9.0"
+    "@modelcontextprotocol/sdk": "^1.10.2",
+    "puppeteer-core": "^23.9.0",
+    "playwright-core": "^1.45.3"
   },
   "devDependencies": {
     "shx": "^0.3.4",

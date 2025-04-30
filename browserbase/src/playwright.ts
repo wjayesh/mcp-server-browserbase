@@ -1,0 +1,1154 @@
+#!/usr/bin/env node
+
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import {
+  CallToolRequestSchema,
+  ListResourcesRequestSchema,
+  ListToolsRequestSchema,
+  ReadResourceRequestSchema,
+  CallToolResult,
+  TextContent,
+  ImageContent,
+  Tool,
+} from "@modelcontextprotocol/sdk/types.js";
+import {
+  chromium,
+  Browser,
+  Page,
+  errors as PlaywrightErrors,
+} from "playwright-core";
+import { Browserbase } from "@browserbasehq/sdk";
+
+// Environment variables configuration
+const requiredEnvVars = {
+  BROWSERBASE_API_KEY: process.env.BROWSERBASE_API_KEY,
+  BROWSERBASE_PROJECT_ID: process.env.BROWSERBASE_PROJECT_ID,
+};
+
+// Validate required environment variables
+Object.entries(requiredEnvVars).forEach(([name, value]) => {
+  if (!value) throw new Error(`${name} environment variable is required`);
+});
+
+// 2. Global State
+const browsers = new Map<string, { browser: Browser; page: Page }>();
+const screenshots = new Map<string, string>();
+
+// Global state variable for the default browser session
+let defaultBrowserSession: { browser: Browser; page: Page } | null = null;
+const sessionId = "default"; // Using a consistent session ID for the default session
+
+// Ensure browser session is initialized and valid
+async function ensureBrowserSession(): Promise<{
+  browser: Browser;
+  page: Page;
+}> {
+  try {
+    // If no session exists, create one
+    if (!defaultBrowserSession) {
+      console.error("No default session found, creating new one...");
+      defaultBrowserSession = await createNewBrowserSession(sessionId);
+      return defaultBrowserSession;
+    }
+
+    // Check if the browser is still connected and page is open
+    if (
+      !defaultBrowserSession.browser.isConnected() ||
+      defaultBrowserSession.page.isClosed()
+    ) {
+      console.warn(
+        `Default session browser disconnected (${!defaultBrowserSession.browser.isConnected()}) or page closed (${defaultBrowserSession.page.isClosed()}). Recreating...`,
+      );
+      // Attempt cleanup before recreating
+      try {
+        await defaultBrowserSession.browser.close();
+      } catch (closeError) {
+        console.error(
+          `Error closing potentially defunct browser: ${
+            (closeError as Error).message
+          }`,
+        );
+      } finally {
+        defaultBrowserSession = null; // Clear the reference
+        browsers.delete(sessionId); // Remove from map
+      }
+      defaultBrowserSession = await createNewBrowserSession(sessionId);
+      return defaultBrowserSession;
+    }
+
+    // Try a simple operation to confirm session validity (optional, connectivity checks above might be sufficient)
+    try {
+      await defaultBrowserSession.page.title(); // Lightweight operation
+      console.error("Default session validated successfully.");
+      return defaultBrowserSession;
+    } catch (error) {
+      console.warn(
+        `Error validating session with page.title: ${
+          (error as Error).message
+        }. Assuming session invalid.`,
+      );
+      // Check for Playwright-specific errors indicating a closed/invalid session
+      const isDisconnectedError =
+        error instanceof Error &&
+        (error.message.includes("Target closed") || // Common Playwright error
+          error.message.includes("Browser has been closed") ||
+          error.message.includes("connect ECONNREFUSED") || // Connection refused
+          error.message.includes("Page is closed")); // Explicit check
+      const isTimeoutError = error instanceof PlaywrightErrors.TimeoutError;
+
+      if (isDisconnectedError || isTimeoutError) {
+        console.warn(
+          `Browser session invalid, attempting to recreate: ${
+            (error as Error).message
+          }`,
+        );
+        // Force cleanup of the potentially defunct default session
+        try {
+          if (
+            defaultBrowserSession &&
+            defaultBrowserSession.browser.isConnected()
+          ) {
+            await defaultBrowserSession.browser.close();
+          }
+        } catch (e) {
+          console.error(
+            `Error closing potentially defunct default browser: ${
+              (e as Error).message
+            }`,
+          );
+        } finally {
+          defaultBrowserSession = null; // Clear the reference
+          browsers.delete(sessionId); // Remove from map
+        }
+        // Clean up all other existing browser sessions from the map for good measure
+        console.error("Cleaning up all known browser sessions...");
+        for (const [id, sessionObj] of browsers.entries()) {
+          try {
+            if (sessionObj.browser.isConnected()) {
+              await sessionObj.browser.close();
+            }
+          } catch (e) {
+            console.error(
+              `Error closing browser session ${id}: ${(e as Error).message}`,
+            );
+          }
+          browsers.delete(id);
+        }
+        browsers.clear(); // Ensure map is clear
+        // Create a completely new session with delay
+        console.error("Recreating default browser session after delay...");
+        await new Promise((resolve) => setTimeout(resolve, 1000)); // Removed asterisks around resolve
+        defaultBrowserSession = await createNewBrowserSession(sessionId);
+        console.error("New default browser session created.");
+        return defaultBrowserSession;
+      }
+      // If it's a different error, re-throw
+      console.error(
+        `Unhandled validation error, re-throwing: ${(error as Error).message}`,
+      );
+      throw error;
+    }
+  } catch (error) {
+    console.error(
+      `Unhandled error in ensureBrowserSession: ${(error as Error).message}`,
+    );
+    // Attempt recovery if it seems like a connection issue
+    if (
+      error instanceof Error &&
+      (error.message.includes("Target closed") ||
+        error.message.includes("connect ECONNREFUSED") ||
+        error.message.includes("Page is closed"))
+    ) {
+      console.error("Attempting aggressive recovery...");
+      browsers.clear();
+      defaultBrowserSession = null;
+      await new Promise((resolve) => setTimeout(resolve, 2000)); // Removed asterisks around resolve
+      try {
+        defaultBrowserSession = await createNewBrowserSession(sessionId); // Recreate default
+        console.error(
+          "Aggressive recovery successful, new default session created.",
+        );
+        return defaultBrowserSession;
+      } catch (retryError) {
+        console.error(
+          `Aggressive recovery failed: ${(retryError as Error).message}`,
+        );
+        throw retryError; // Throw the error from the retry attempt
+      }
+    }
+    throw error; // Re-throw original error if not a recognized recoverable error
+  }
+}
+
+// 3. Helper Functions
+async function createNewBrowserSession(
+  newSessionId: string, // Removed asterisks
+): Promise<{ browser: Browser; page: Page }> {
+  console.error(`Creating new browser session with ID: ${newSessionId}`);
+  const bb = new Browserbase({
+    apiKey: process.env.BROWSERBASE_API_KEY!,
+  });
+
+  const session = await bb.sessions.create({
+    projectId: process.env.BROWSERBASE_PROJECT_ID!,
+    proxies: true, // You might want to make this configurable
+  });
+  console.error("Browserbase session created:", session.id);
+
+  // const browser = await chromium.connect({ // Use playwright-core's chromium.connect
+  // wsEndpoint: session.connectUrl,
+  // timeout: 60000, // Increase connection timeout
+  // });
+  const browser = await chromium.connectOverCDP(session.connectUrl);
+  console.error("Connected to Playwright via CDP.");
+
+  // Handle unexpected disconnects
+  browser.on("disconnected", () => {
+    console.warn(
+      `Browser disconnected unexpectedly for session ID: ${newSessionId}`,
+    );
+    browsers.delete(newSessionId);
+    // If the disconnected browser was the default one, clear the global reference
+    if (defaultBrowserSession && defaultBrowserSession.browser === browser) {
+      console.warn("Default browser session disconnected.");
+      defaultBrowserSession = null;
+    }
+  });
+
+  // Use the first context and page, assuming Browserbase provides one
+  // If Browserbase session starts with no pages, create one.
+  let context = browser.contexts()[0];
+  if (!context) {
+    console.error("No existing context found, creating new context.");
+    context = await browser.newContext();
+  }
+  let page = context.pages()[0];
+  if (!page) {
+    console.error("No existing page found in context, creating new page.");
+    page = await context.newPage();
+  }
+  console.error(`Using page: ${page.url()}`);
+  // Store the session
+  browsers.set(newSessionId, { browser, page });
+  console.error(`Session ${newSessionId} stored.`);
+  return { browser, page };
+}
+
+// 4. Tool Definitions
+const TOOLS: Tool[] = [
+  {
+    name: "browserbase_create_session",
+    description: "Create a new cloud browser session using Browserbase",
+    inputSchema: {
+      type: "object",
+      properties: {
+        sessionId: {
+          type: "string",
+          description:
+            "A unique ID for the session (optional, uses a generated ID if not provided)",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "browserbase_navigate",
+    description: "Navigate to a URL",
+    inputSchema: {
+      type: "object",
+      properties: {
+        url: { type: "string" },
+        sessionId: {
+          type: "string",
+          description: "Target session ID (optional, defaults to 'default')",
+        },
+      },
+      required: ["url"],
+    },
+  },
+  {
+    name: "browserbase_screenshot",
+    description:
+      "Takes a screenshot of the current page. Use this tool to learn where you are on the page when controlling the browser with Stagehand. Only use this tool when the other tools are not sufficient to get the information you need.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: {
+          type: "string",
+          description:
+            "Name to save the screenshot under (optional, defaults to timestamp)",
+        },
+        sessionId: {
+          type: "string",
+          description: "Target session ID (optional, defaults to 'default')",
+        },
+      },
+      required: [], // name is optional
+    },
+  },
+  {
+    name: "browserbase_click",
+    description: "Click an element on the page",
+    inputSchema: {
+      type: "object",
+      properties: {
+        selector: {
+          type: "string",
+          description: "CSS or Playwright selector for element to click",
+        },
+        sessionId: {
+          type: "string",
+          description: "Target session ID (optional, defaults to 'default')",
+        },
+      },
+      required: ["selector"],
+    },
+  },
+  {
+    name: "browserbase_fill",
+    description:
+      "Fill out an input field with the specified text. Does NOT press Enter.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        selector: {
+          type: "string",
+          description: "CSS or Playwright selector for input field",
+        },
+        value: { type: "string", description: "Value to fill" },
+        sessionId: {
+          type: "string",
+          description: "Target session ID (optional, defaults to 'default')",
+        },
+      },
+      required: ["selector", "value"],
+    },
+  },
+  {
+    name: "browserbase_press_key",
+    description:
+      "Press a specific key (e.g., Enter, Tab) on a selected element or globally.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        selector: {
+          type: "string",
+          description:
+            "CSS or Playwright selector for the target element (optional, presses key globally if omitted)",
+        },
+        key: {
+          type: "string",
+          description:
+            "The key to press (e.g., 'Enter', 'Tab', 'ArrowDown', 'a', 'Shift+A'). See Playwright key documentation.",
+        },
+        sessionId: {
+          type: "string",
+          description: "Target session ID (optional, defaults to 'default')",
+        },
+      },
+      required: ["key"], // Selector is optional
+    },
+  },
+  {
+    name: "browserbase_get_text",
+    description:
+      "Extract all text content from the current page or a specific element",
+    inputSchema: {
+      type: "object",
+      properties: {
+        selector: {
+          type: "string",
+          description:
+            "Optional CSS or Playwright selector to get text from a specific element",
+        },
+        sessionId: {
+          type: "string",
+          description: "Target session ID (optional, defaults to 'default')",
+        },
+      },
+      required: [], // selector is optional
+    },
+  },
+];
+
+// 5. Tool Handler Implementation
+async function handleToolCall(
+  name: string, // Removed asterisks
+  args: any, // Removed asterisks
+): Promise<CallToolResult> {
+  console.error(
+    `Handling tool call: ${name} with args: ${JSON.stringify(args)}`,
+  );
+  try {
+    let sessionObj: { browser: Browser; page: Page } | null = null; // Changed from undefined for clarity
+    const targetSessionId = args.sessionId || sessionId; // Use provided sessionId or default
+
+    // --- browserbase_create_session ---
+    if (name === "browserbase_create_session") {
+      // Allow user to specify an ID, otherwise generate one. Default is 'default'.
+      const newSessionId = args.sessionId || `session_${Date.now()}`;
+      try {
+        // Check if session already exists
+        if (browsers.has(newSessionId)) {
+          console.warn(`Session '${newSessionId}' already exists.`);
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Session '${newSessionId}' already exists.`,
+              },
+            ],
+            isError: false, // Not an error, just informing
+          };
+        }
+        // Create the new session
+        const createdSession = await createNewBrowserSession(newSessionId);
+        // If creating the default session, update the global reference
+        if (newSessionId === sessionId) {
+          defaultBrowserSession = createdSession;
+        }
+        console.error(`Successfully created session: ${newSessionId}`);
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Created new browser session with ID: ${newSessionId}`,
+            },
+          ],
+          isError: false,
+        };
+      } catch (error) {
+        console.error(
+          `Failed to create browser session '${newSessionId}': ${
+            (error as Error).message
+          }`,
+        );
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to create browser session '${newSessionId}': ${
+                (error as Error).message
+              }`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+
+    // --- For other tools, ensure session exists ---
+    console.error(`Looking for session: ${targetSessionId}`);
+    if (targetSessionId === sessionId) {
+      // Requesting the default session, ensure it's valid
+      console.error("Default session requested, ensuring validity...");
+      sessionObj = await ensureBrowserSession(); // This handles creation/validation/recreation
+    } else if (browsers.has(targetSessionId)) {
+      // Requesting a specific, non-default session
+      console.error(`Found specific session ${targetSessionId} in map.`);
+      sessionObj = browsers.get(targetSessionId)!; // Get from map
+      // Validate this specific session
+      if (!sessionObj.browser.isConnected() || sessionObj.page.isClosed()) {
+        console.warn(
+          `Specific session ${targetSessionId} is disconnected or page closed. Attempting to recreate...`,
+        );
+        try {
+          await sessionObj.browser.close(); // Close defunct session
+        } catch (e) {
+          console.error(
+            `Error closing defunct session ${targetSessionId}: ${
+              (e as Error).message
+            }`,
+          );
+        }
+        browsers.delete(targetSessionId); // Remove from map
+        try {
+          sessionObj = await createNewBrowserSession(targetSessionId); // Recreate with the same ID
+          console.error(`Successfully recreated session ${targetSessionId}.`);
+        } catch (recreateError) {
+          console.error(
+            `Failed to recreate session ${targetSessionId}: ${
+              (recreateError as Error).message
+            }`,
+          );
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Session '${targetSessionId}' is invalid and could not be recreated: ${
+                  (recreateError as Error).message
+                }`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      } else {
+        // Perform a quick check to be sure
+        try {
+          await sessionObj.page.title();
+          console.error(`Specific session ${targetSessionId} validated.`);
+        } catch (validationError) {
+          console.warn(
+            `Validation check failed for session ${targetSessionId}: ${
+              (validationError as Error).message
+            }. Assuming invalid.`,
+          );
+          // Handle like the disconnected case above
+          try {
+            await sessionObj.browser.close();
+          } catch (e) {}
+          browsers.delete(targetSessionId);
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Session '${targetSessionId}' failed validation check: ${
+                  (validationError as Error).message
+                }`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+    } else {
+      // Requested a specific session ID that does not exist in the map
+      console.error(`Session with ID '${targetSessionId}' does not exist.`);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Session with ID '${targetSessionId}' does not exist. Please create it first using browserbase_create_session or use the default session.`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    // If after all checks, sessionObj is still null, something fundamental went wrong
+    if (!sessionObj) {
+      console.error(
+        `Could not obtain a valid browser session for ID: ${targetSessionId} after all checks.`,
+      );
+      throw new Error(
+        `Could not obtain a valid browser session for ID: ${targetSessionId}`,
+      );
+    }
+
+    // We have a sessionObj, destructure the page
+    const { page } = sessionObj;
+
+    // Final check: Ensure page is usable (might have closed between checks)
+    if (page.isClosed()) {
+      console.error(
+        `Page for session ${targetSessionId} was closed right before use.`,
+      );
+      // Attempt recovery specifically for the default session if it was the target
+      if (targetSessionId === sessionId) {
+        console.error("Attempting recovery of default session...");
+        try {
+          sessionObj = await ensureBrowserSession(); // Try to recover the default session
+          if (!sessionObj || sessionObj.page.isClosed()) {
+            throw new Error(
+              `Default page is closed and could not be recovered.`,
+            );
+          }
+          // Use the newly recovered page
+          const recoveredPage = sessionObj.page;
+          // Continue with the recoveredPage for the switch statement
+          // This logic needs careful handling, maybe re-run the switch with recoveredPage?
+          // For simplicity, let's return an error for now, suggesting retry.
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Page for session ${targetSessionId} was closed. Recovery attempted. Please retry the operation.`,
+              },
+            ],
+            isError: true,
+          };
+        } catch (recoveryError) {
+          throw new Error(
+            `Page for session ${targetSessionId} is closed and recovery failed: ${
+              (recoveryError as Error).message
+            }`,
+          );
+        }
+      } else {
+        // For non-default sessions, less straightforward to recover automatically
+        throw new Error(
+          `Page for non-default session ${targetSessionId} is closed.`,
+        );
+      }
+    }
+
+    // --- Execute Tool Logic ---
+    switch (name) {
+      // browserbase_create_session handled above
+
+      case "browserbase_navigate":
+        if (!args.url)
+          return {
+            content: [{ type: "text", text: "Missing required argument: url" }],
+            isError: true,
+          };
+        console.error(`Navigating session ${targetSessionId} to ${args.url}`);
+        await page.goto(args.url, {
+          waitUntil: "domcontentloaded",
+          timeout: 60000,
+        }); // Added waituntil and timeout
+        console.error(`Navigation successful for session ${targetSessionId}.`);
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Navigated session ${targetSessionId} to ${args.url}`,
+            },
+          ],
+          isError: false,
+        };
+
+      case "browserbase_screenshot": {
+        const screenshotName = args.name || `screenshot_${Date.now()}.png`; // Ensure .png extension
+        console.error(
+          `Taking screenshot for session ${targetSessionId}, saving as ${screenshotName}`,
+        );
+        const screenshotBuffer = await page.screenshot({
+          // encoding: "base64", // Playwright returns Buffer by default
+          fullPage: false, // Configurable: false for viewport, true for full page
+          type: "png", // Specify type
+          timeout: 30000, // Add timeout
+        });
+        if (!screenshotBuffer || screenshotBuffer.length === 0) {
+          console.error(
+            `Screenshot failed for session ${targetSessionId} - buffer empty.`,
+          );
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Screenshot failed: Empty buffer returned.",
+              },
+            ],
+            isError: true,
+          };
+        }
+        const screenshotBase64 = screenshotBuffer.toString("base64");
+        screenshots.set(screenshotName, screenshotBase64); // Store base64 data
+        server.notification({ method: "notifications/resources/list_changed" }); // Notify client about new resource
+        console.error(
+          `Screenshot taken and saved in memory as '${screenshotName}' for session ${targetSessionId}.`,
+        );
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Screenshot taken for session ${targetSessionId} and saved as '${screenshotName}'`,
+            } as TextContent,
+            {
+              type: "image",
+              data: screenshotBase64,
+              mimeType: "image/png",
+            } as ImageContent,
+          ],
+          isError: false,
+        };
+      }
+
+      case "browserbase_click":
+        if (!args.selector)
+          return {
+            content: [
+              { type: "text", text: "Missing required argument: selector" },
+            ],
+            isError: true,
+          };
+        try {
+          console.error(
+            `Attempting to click '${args.selector}' in session ${targetSessionId}`,
+          );
+          // Recommended: Wait for the element first with a reasonable timeout
+          await page.waitForSelector(args.selector, {
+            state: "visible",
+            timeout: 15000,
+          });
+          await page.locator(args.selector).click({ timeout: 10000 }); // Use locator API with timeout
+          console.error(
+            `Clicked '${args.selector}' successfully in session ${targetSessionId}.`,
+          );
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Clicked element matching selector: ${args.selector} in session ${targetSessionId}`,
+              },
+            ],
+            isError: false,
+          };
+        } catch (error) {
+          console.error(
+            `Failed to click ${args.selector} in session ${targetSessionId}: ${
+              (error as Error).message
+            }`,
+          );
+          // Provide more context in the error message
+          let errorMessage = `Failed to click element matching selector "${args.selector}" in session ${targetSessionId}.`;
+          if (error instanceof PlaywrightErrors.TimeoutError) {
+            errorMessage +=
+              " Reason: Timeout waiting for element or click action.";
+          } else if (
+            error instanceof Error &&
+            error.message.includes("strict mode violation")
+          ) {
+            errorMessage +=
+              " Reason: Multiple elements matched the selector. Please provide a more specific selector.";
+          } else {
+            errorMessage += ` Reason: ${(error as Error).message}`;
+          }
+          return {
+            content: [{ type: "text", text: errorMessage }],
+            isError: true,
+          };
+        }
+
+      case "browserbase_fill":
+        if (!args.selector)
+          return {
+            content: [
+              { type: "text", text: "Missing required argument: selector" },
+            ],
+            isError: true,
+          };
+        if (typeof args.value !== "string")
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Missing or invalid required argument: value (must be a string)",
+              },
+            ],
+            isError: true,
+          };
+        try {
+          // Fill the input
+          console.error(
+            `Attempting to fill '${args.selector}' in session ${targetSessionId} with value (length: ${args.value.length})`,
+          );
+          // Recommended: Wait for the element first
+          await page.waitForSelector(args.selector, {
+            state: "visible",
+            timeout: 15000,
+          });
+
+          await page
+            .locator(args.selector)
+            .fill(args.value, { timeout: 10000 }); // Use locator and fill with timeout
+          // REMOVED implicit Enter press:
+          // await page.press(args.selector, "Enter", { timeout: 5000 });
+          console.error(
+            `Filled '${args.selector}' successfully in session ${targetSessionId}. (Enter NOT pressed)`,
+          );
+          return {
+            // Avoid logging sensitive values like passwords
+            content: [
+              {
+                type: "text",
+                text: `Filled element matching selector ${args.selector} in session ${targetSessionId}. Use browserbase_press_key to press Enter if needed.`,
+              },
+            ],
+            isError: false,
+          };
+        } catch (error) {
+          console.error(
+            `Failed to fill '${args.selector}' in session ${targetSessionId}: ${
+              (error as Error).message
+            }`,
+          );
+          let errorMessage = `Failed to fill element matching selector "${args.selector}" in session ${targetSessionId}.`;
+          if (error instanceof PlaywrightErrors.TimeoutError) {
+            errorMessage +=
+              " Reason: Timeout waiting for element or fill action.";
+          } else {
+            errorMessage += ` Reason: ${(error as Error).message}`;
+          }
+          return {
+            content: [{ type: "text", text: errorMessage }],
+            isError: true,
+          };
+        }
+
+      case "browserbase_press_key": {
+        if (!args.key) {
+          return {
+            content: [{ type: "text", text: "Missing required argument: key" }],
+            isError: true,
+          };
+        }
+        try {
+          const keyToPress = args.key;
+          if (args.selector) {
+            console.error(
+              `Attempting to press key '${keyToPress}' on selector '${args.selector}' in session ${targetSessionId}`,
+            );
+            // Ensure element exists and is interactable before pressing key
+            await page.waitForSelector(args.selector, {
+              state: "visible",
+              timeout: 15000,
+            });
+            // page.press supports timeout
+            await page.press(args.selector, keyToPress, { timeout: 5000 });
+            console.error(
+              `Pressed key '${keyToPress}' on '${args.selector}' successfully in session ${targetSessionId}.`,
+            );
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Pressed key '${keyToPress}' on element matching selector: ${args.selector} in session ${targetSessionId}`,
+                },
+              ],
+              isError: false,
+            };
+          } else {
+            // Press key globally (no specific element target)
+            console.error(
+              `Attempting to press key '${keyToPress}' globally in session ${targetSessionId}`,
+            );
+            // page.keyboard.press does NOT support timeout
+            await page.keyboard.press(keyToPress);
+            console.error(
+              `Pressed key '${keyToPress}' globally successfully in session ${targetSessionId}.`,
+            );
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Pressed key '${keyToPress}' globally in session ${targetSessionId}`,
+                },
+              ],
+              isError: false,
+            };
+          }
+        } catch (error) {
+          console.error(
+            `Failed to press key '${args.key}' ${args.selector ? "on selector " + args.selector : "globally"} in session ${targetSessionId}: ${(error as Error).message}`,
+          );
+          let errorMessage = `Failed to press key "${args.key}" ${args.selector ? 'on element matching selector "' + args.selector + '"' : "globally"} in session ${targetSessionId}.`;
+          if (error instanceof PlaywrightErrors.TimeoutError) {
+            errorMessage +=
+              " Reason: Timeout waiting for element or key press action.";
+          } else {
+            errorMessage += ` Reason: ${(error as Error).message}`;
+          }
+          return {
+            content: [{ type: "text", text: errorMessage }],
+            isError: true,
+          };
+        }
+      }
+
+      case "browserbase_get_text": {
+        try {
+          console.error(
+            `Getting text content from session ${targetSessionId} (selector: ${
+              args.selector || "body"
+            })`,
+          );
+          let textContent: string;
+          const targetLocator = args.selector
+            ? page.locator(args.selector)
+            : page.locator("body");
+          // Wait for the target element/body to be present
+          await targetLocator
+            .first()
+            .waitFor({ state: "attached", timeout: 15000 });
+          if (args.selector) {
+            // Get text from a specific element (or first match if multiple)
+            // innerText() is generally preferred for user-visible text
+            textContent = await targetLocator
+              .first()
+              .innerText({ timeout: 10000 });
+          } else {
+            // Get text from the entire body
+            textContent = await targetLocator.innerText({ timeout: 10000 });
+          }
+          console.error(
+            `Successfully retrieved raw text content from session ${targetSessionId}. Length: ${textContent.length}`,
+          );
+          // Basic cleanup - same as index.ts for consistency, can be refined
+          const cleanedContent = textContent
+            .split("\n") // Split by newline
+            .map((line) => line.trim()) // Trim whitespace
+            .filter(
+              (line) =>
+                line &&
+                !/\{.*\}/.test(line) &&
+                !/@keyframes/.test(line) &&
+                !/^[\.#]/.test(line),
+            ) // Filter empty lines, basic CSS/JS blocks
+            .join("\n"); // Rejoin with newlines
+          console.error(
+            `Cleaned text content length: ${cleanedContent.length}`,
+          );
+          // Limit output size if necessary
+          const MAX_TEXT_LENGTH = 5000; // Example limit
+          const truncatedContent =
+            cleanedContent.length > MAX_TEXT_LENGTH
+              ? cleanedContent.substring(0, MAX_TEXT_LENGTH) + "... (truncated)"
+              : cleanedContent;
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Extracted content from session ${targetSessionId}:
+${truncatedContent}`,
+              },
+            ],
+            isError: false,
+          };
+        } catch (error) {
+          console.error(
+            `Failed to extract content from session ${targetSessionId}: ${
+              (error as Error).message
+            }`,
+          );
+          let errorMessage = `Failed to extract text content from session ${targetSessionId} (selector: ${
+            args.selector || "body"
+          }).`;
+          if (error instanceof PlaywrightErrors.TimeoutError) {
+            errorMessage +=
+              " Reason: Timeout waiting for element or text extraction.";
+          } else {
+            errorMessage += ` Reason: ${(error as Error).message}`;
+          }
+          return {
+            content: [{ type: "text", text: errorMessage }],
+            isError: true,
+          };
+        }
+      }
+
+      default:
+        console.error(`Unknown tool requested: ${name}`);
+        return {
+          content: [{ type: "text", text: `Unknown tool: ${name}` }],
+          isError: true,
+        };
+    }
+  } catch (error) {
+    // Catch errors from session acquisition or general tool handling
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error(`Critical error handling tool call '${name}' with args ${JSON.stringify(
+      args,
+    )}: ${errorMsg}
+${(error as Error).stack}`);
+    // Check if it's a disconnection error type that might be recoverable
+    const isRecoverableError =
+      error instanceof Error &&
+      (error.message.includes("Target closed") ||
+        error.message.includes("Browser has been closed") ||
+        error.message.includes("connect ECONNREFUSED") ||
+        error.message.includes("Page is closed") ||
+        error.message.includes("Session does not exist")); // Might indicate session was cleaned up
+
+    if (isRecoverableError) {
+      console.error(
+        "Potentially recoverable error detected, attempting session recovery...",
+      );
+      try {
+        // Attempt to ensure the default session is okay.
+        // This might not help if the error was with a specific session,
+        // but it's a reasonable recovery attempt.
+        await ensureBrowserSession();
+        console.error("Session recovery attempt finished.");
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Tool call failed due to a session issue (${errorMsg}). Recovery attempted. Please retry the operation.`,
+            },
+          ],
+          isError: true,
+        };
+      } catch (recoveryError) {
+        console.error(
+          `Session recovery attempt failed: ${(recoveryError as Error).message}`,
+        );
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Tool call failed (${errorMsg}) and session recovery also failed: ${
+                (recoveryError as Error).message
+              }`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+    // If not a recoverable error, or recovery failed, return the original error
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Failed to handle tool call '${name}': ${errorMsg}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+// 6. Server Setup and Configuration
+const server = new Server(
+  {
+    name: "mcp-servers/browserbase-playwright", // Updated server name
+    version: "0.1.0",
+    // Add other server metadata if needed
+  },
+  {
+    capabilities: {
+      resources: {
+        // Enable resource listing/reading if screenshots are used
+        list: true,
+        read: true,
+      },
+      tools: {
+        // Enable tool listing/calling
+        list: true,
+        call: true,
+      },
+      notifications: {
+        // Enable notifications if needed (e.g., for screenshot updates)
+        resources: {
+          list_changed: true,
+        },
+      },
+    },
+  },
+);
+
+// 7. Request Handlers
+// --- List Resources ---
+server.setRequestHandler(ListResourcesRequestSchema, async () => {
+  console.error("Handling ListResources request.");
+  const resourceList = Array.from(screenshots.keys()).map((name) => ({
+    // Removed asterisks around name
+    uri: `screenshot://${name}`,
+    mimeType: "image/png",
+    name: `Screenshot: ${name}`,
+    // Optionally add size or timestamp if available/relevant
+  }));
+  console.error(`Returning ${resourceList.length} screenshot resources.`);
+  return { resources: resourceList };
+});
+
+// --- Read Resource ---
+server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+  // Removed asterisks around request
+  const uri = request.params.uri.toString();
+  console.error(`Handling ReadResource request for URI: ${uri}`);
+  if (uri.startsWith("screenshot://")) {
+    const name = uri.split("://")[1];
+    const screenshotBase64 = screenshots.get(name); // Get base64 data
+    if (screenshotBase64) {
+      console.error(`Found screenshot resource: ${name}`);
+      return {
+        contents: [
+          {
+            uri,
+            mimeType: "image/png",
+            blob: screenshotBase64, // Send base64 data as blob
+          },
+        ],
+      };
+    } else {
+      console.error(`Screenshot resource not found: ${name}`);
+      throw new Error(`Resource not found: ${uri}`);
+    }
+  }
+  console.error(`Resource URI format not recognized: ${uri}`);
+  throw new Error(`Resource not found or format not supported: ${uri}`);
+});
+
+// --- List Tools ---
+server.setRequestHandler(ListToolsRequestSchema, async () => {
+  console.error("Handling ListTools request.");
+  return { tools: TOOLS };
+});
+
+// --- Call Tool ---
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  // Removed asterisks around request
+  console.error(`Handling CallTool request for tool: ${request.params.name}`);
+  return handleToolCall(request.params.name, request.params.arguments ?? {}); // Removed asterisks around request
+});
+
+// 8. Server Initialization
+async function runServer() {
+  // Removed double asterisks
+  try {
+    console.error("Initializing server transport...");
+    const transport = new StdioServerTransport();
+    console.error("Connecting server...");
+    await server.connect(transport);
+    console.error("Playwright MCP server connected via stdio and ready.");
+    // Optionally, try to pre-warm the default browser session
+    // console.error("Pre-warming default browser session...");
+    // await ensureBrowserSession();
+    // console.error("Default browser session pre-warmed.");
+  } catch (error) {
+    console.error(
+      `Failed to start or connect server: ${(error as Error).message}`,
+    );
+    process.exit(1); // Exit if server fails to start
+  }
+}
+
+// Graceful shutdown handling
+const signals: NodeJS.Signals[] = ["SIGINT", "SIGTERM"];
+signals.forEach((signal) => {
+  // Removed asterisks around signal
+  process.on(signal, async () => {
+    // Removed asterisks around signal
+    console.error(`
+Received ${signal}. Shutting down gracefully...`); // Removed asterisks around signal
+    try {
+      // Close all active browser sessions
+      console.error("Closing active browser sessions...");
+      for (const [id, sessionObj] of browsers.entries()) {
+        try {
+          if (sessionObj.browser.isConnected()) {
+            await sessionObj.browser.close();
+            console.error(`Closed browser session ${id}.`);
+          }
+        } catch (e) {
+          console.error(
+            `Error closing browser session ${id}: ${(e as Error).message}`,
+          );
+        }
+      }
+      browsers.clear();
+      defaultBrowserSession = null;
+      console.error("Browser sessions closed.");
+      // Disconnect server transport if possible (may depend on transport implementation)
+      console.error("Disconnecting server transport...");
+      console.error("Server transport likely disconnected on process exit.");
+    } catch (shutdownError) {
+      console.error("Error during graceful shutdown:", shutdownError);
+    } finally {
+      console.error("Shutdown complete. Exiting.");
+      process.exit(0);
+    }
+  });
+});
+
+// Start the server
+runServer().catch((err) => {
+  // Removed asterisks around err, removed double asterisks around runServer
+  console.error("Server execution failed:", err); // Removed asterisks around err
+  process.exit(1);
+});
