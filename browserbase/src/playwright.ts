@@ -268,23 +268,18 @@ const TOOLS: Tool[] = [
     },
   },
   {
-    name: "browserbase_screenshot",
+    name: "browserbase_take_screenshot",
     description:
-      "Takes a screenshot of the current page. Use this tool to learn where you are on the page when controlling the browser with Stagehand. Only use this tool when the other tools are not sufficient to get the information you need.",
+      "Take a screenshot of the current page. You can't perform actions based on the screenshot, use browser_snapshot for actions.",
     inputSchema: {
       type: "object",
       properties: {
-        name: {
-          type: "string",
-          description:
-            "Name to save the screenshot under (optional, defaults to timestamp)",
-        },
         sessionId: {
           type: "string",
           description: "Target session ID (optional, defaults to 'default')",
         },
       },
-      required: [], // name is optional
+      required: [], // No required args
     },
   },
   {
@@ -306,9 +301,9 @@ const TOOLS: Tool[] = [
     },
   },
   {
-    name: "browserbase_fill",
+    name: "browserbase_type",
     description:
-      "Fill out an input field with the specified text. Does NOT press Enter.",
+      "Type text into editable element specified by a selector. Does NOT press Enter by default.",
     inputSchema: {
       type: "object",
       properties: {
@@ -316,13 +311,13 @@ const TOOLS: Tool[] = [
           type: "string",
           description: "CSS or Playwright selector for input field",
         },
-        value: { type: "string", description: "Value to fill" },
+        text: { type: "string", description: "Text to type" },
         sessionId: {
           type: "string",
           description: "Target session ID (optional, defaults to 'default')",
         },
       },
-      required: ["selector", "value"],
+      required: ["selector", "text"],
     },
   },
   {
@@ -610,8 +605,8 @@ async function handleToolCall(
           isError: false,
         };
 
-      case "browserbase_screenshot": {
-        const screenshotName = args.name || `screenshot_${Date.now()}.png`; // Ensure .png extension
+      case "browserbase_take_screenshot": {
+        const screenshotName = `screenshot_${Date.now()}.png`; // Use default timestamp name
         console.error(
           `Taking screenshot for session ${targetSessionId}, saving as ${screenshotName}`,
         );
@@ -713,7 +708,7 @@ async function handleToolCall(
           };
         }
 
-      case "browserbase_fill":
+      case "browserbase_type":
         if (!args.selector)
           return {
             content: [
@@ -721,12 +716,12 @@ async function handleToolCall(
             ],
             isError: true,
           };
-        if (typeof args.value !== "string")
+        if (typeof args.text !== "string")
           return {
             content: [
               {
                 type: "text",
-                text: "Missing or invalid required argument: value (must be a string)",
+                text: "Missing or invalid required argument: text (must be a string)",
               },
             ],
             isError: true,
@@ -734,7 +729,7 @@ async function handleToolCall(
         try {
           // Fill the input
           console.error(
-            `Attempting to fill '${args.selector}' in session ${targetSessionId} with value (length: ${args.value.length})`,
+            `Attempting to type into '${args.selector}' in session ${targetSessionId} with text (length: ${args.text.length})`,
           );
           // Recommended: Wait for the element first
           await page.waitForSelector(args.selector, {
@@ -744,32 +739,32 @@ async function handleToolCall(
 
           await page
             .locator(args.selector)
-            .fill(args.value, { timeout: 10000 }); // Use locator and fill with timeout
+            .fill(args.text, { timeout: 10000 }); // Use args.text
           // REMOVED implicit Enter press:
           // await page.press(args.selector, "Enter", { timeout: 5000 });
           console.error(
-            `Filled '${args.selector}' successfully in session ${targetSessionId}. (Enter NOT pressed)`,
+            `Typed into '${args.selector}' successfully in session ${targetSessionId}. (Enter NOT pressed)`,
           );
           return {
             // Avoid logging sensitive values like passwords
             content: [
               {
                 type: "text",
-                text: `Filled element matching selector ${args.selector} in session ${targetSessionId}. Use browserbase_press_key to press Enter if needed.`,
+                text: `Typed into element matching selector ${args.selector} in session ${targetSessionId}. Use browserbase_press_key to press Enter if needed.`,
               },
             ],
             isError: false,
           };
         } catch (error) {
           console.error(
-            `Failed to fill '${args.selector}' in session ${targetSessionId}: ${
+            `Failed to type into '${args.selector}' in session ${targetSessionId}: ${
               (error as Error).message
             }`,
           );
-          let errorMessage = `Failed to fill element matching selector "${args.selector}" in session ${targetSessionId}.`;
+          let errorMessage = `Failed to type into element matching selector "${args.selector}" in session ${targetSessionId}.`;
           if (error instanceof PlaywrightErrors.TimeoutError) {
             errorMessage +=
-              " Reason: Timeout waiting for element or fill action.";
+              " Reason: Timeout waiting for element or type action.";
           } else {
             errorMessage += ` Reason: ${(error as Error).message}`;
           }
