@@ -3,6 +3,38 @@ import { Tool } from "@modelcontextprotocol/sdk/types.js";
 // Tool Definitions
 export const TOOLS: Tool[] = [
   {
+    name: "browserbase_create_context",
+    description: "Create a new Browserbase context for reusing cookies, authentication, and cached data across browser sessions",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: {
+          type: "string",
+          description: "Optional friendly name to reference this context later (otherwise, you'll need to use the returned ID)",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "browserbase_delete_context",
+    description: "Delete a Browserbase context when you no longer need it",
+    inputSchema: {
+      type: "object",
+      properties: {
+        contextId: {
+          type: "string",
+          description: "The context ID to delete (required if name not provided)",
+        },
+        name: {
+          type: "string",
+          description: "The friendly name of the context to delete (required if contextId not provided)",
+        },
+      },
+      required: [],
+    },
+  },
+  {
     // Kept as browserbase_* as it's specific to this multi-session implementation
     name: "browserbase_create_session",
     description: "Create a new cloud browser session using Browserbase",
@@ -13,6 +45,25 @@ export const TOOLS: Tool[] = [
           type: "string",
           description:
             "A unique ID for the session (optional, uses a generated ID if not provided)",
+        },
+        context: {
+          type: "object",
+          properties: {
+            id: {
+              type: "string",
+              description: "The context ID to use for this session (to reuse cookies and cache)",
+            },
+            name: {
+              type: "string",
+              description: "The friendly name of the context to use (alternative to id)",
+            },
+            persist: {
+              type: "boolean",
+              description: "Whether to save changes to the context. Set to true to store cookies and cache for future use.",
+              default: true,
+            },
+          },
+          description: "Context settings to enable persistence of cookies, authentication, and cached data across sessions",
         },
       },
       required: [],

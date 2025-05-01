@@ -40,6 +40,33 @@ The server communicates over stdio according to the Model Context Protocol.
 *   `Dockerfile`: For building a Docker image
 *   Configuration files (`.json`, `.ts`, `.mjs`, `.npmignore`)
 
+## Contexts for Persistence
+
+This server supports Browserbase's Contexts feature, which allows persisting cookies, authentication, and cached data across browser sessions:
+
+1. **Creating a Context**:
+   ```
+   browserbase_create_context: Creates a new context, optionally with a friendly name
+   ```
+
+2. **Using a Context with a Session**:
+   ```
+   browserbase_create_session: Now accepts a 'context' parameter with:
+     - id: The context ID to use
+     - name: Alternative to ID, the friendly name of the context
+     - persist: Whether to save changes (cookies, cache) back to the context (default: true)
+   ```
+
+3. **Deleting a Context**:
+   ```
+   browserbase_delete_context: Deletes a context when you no longer need it
+   ```
+
+Contexts make it much easier to:
+- Maintain login state across sessions
+- Reduce page load times by preserving cache
+- Avoid CAPTCHAs and detection by reusing browser fingerprints
+
 ## TODO
 
 *   Implement true `ref`-based interaction logic for click, type, drag, hover, select_option.

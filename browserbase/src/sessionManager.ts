@@ -17,16 +17,34 @@ const defaultSessionId = "default"; // Consistent ID for the default session
 // Function to create a new browser session
 async function createNewBrowserSession(
   newSessionId: string,
+  options?: {
+    contextId?: string;
+    persistContext?: boolean;
+  }
 ): Promise<BrowserSession> {
   console.error(`Creating new browser session with ID: ${newSessionId}`);
   const bb = new Browserbase({
     apiKey: process.env.BROWSERBASE_API_KEY!,
   });
 
-  const session = await bb.sessions.create({
+  // Prepare session creation options
+  const sessionOptions: any = {
     projectId: process.env.BROWSERBASE_PROJECT_ID!,
     proxies: true, // Consider making configurable
-  });
+  };
+  
+  // Add context settings if provided
+  if (options?.contextId) {
+    sessionOptions.browserSettings = {
+      context: {
+        id: options.contextId,
+        persist: options.persistContext !== false, // Default to true if not specified
+      },
+    };
+    console.error(`Using context: ${options.contextId} with persist: ${options.persistContext !== false}`);
+  }
+
+  const session = await bb.sessions.create(sessionOptions);
   console.error("Browserbase session created:", session.id);
 
   const browser = await chromium.connectOverCDP(session.connectUrl);

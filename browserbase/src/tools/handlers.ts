@@ -18,6 +18,7 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js"; // Needed fo
 
 // Import specific tool handlers
 import { handleNavigate } from "./navigate.js";
+import { handleCreateContext, handleDeleteContext, getContextId } from "./context.js";
 import {
   handleSnapshot,
   handleTakeScreenshot,
@@ -62,6 +63,15 @@ export async function handleToolCall(
     let sessionObj: BrowserSession | null = null;
     const targetSessionId = args.sessionId || defaultSessionId;
 
+    // --- Context management tools (require no session) ---
+    if (name === "browserbase_create_context") {
+      return handleCreateContext(args);
+    }
+    
+    if (name === "browserbase_delete_context") {
+      return handleDeleteContext(args);
+    }
+
     // --- browserbase_create_session ---
     if (name === "browserbase_create_session") {
       const newSessionId = args.sessionId || `session_${Date.now()}`;
@@ -78,7 +88,38 @@ export async function handleToolCall(
             isError: false,
           };
         }
-        await createNewBrowserSession(newSessionId);
+        
+        // Check for context settings
+        const contextSettings = args.context;
+        let contextId: string | undefined;
+        
+        if (contextSettings) {
+          // Get context ID either directly or by name
+          if (contextSettings.id) {
+            contextId = contextSettings.id;
+          } else if (contextSettings.name) {
+            contextId = getContextId(contextSettings.name);
+            if (!contextId) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Context with name "${contextSettings.name}" not found`,
+                  },
+                ],
+                isError: true,
+              };
+            }
+          }
+        }
+        
+        // Pass context settings to session creation
+        const sessionOptions = {
+          contextId,
+          persistContext: contextSettings?.persist !== false, // Default to true if not specified
+        };
+        
+        await createNewBrowserSession(newSessionId, sessionOptions);
         // Note: We don't need to update defaultBrowserSession here as
         // createNewBrowserSession doesn't automatically set the default.
         console.error(`Successfully created session: ${newSessionId}`);
@@ -86,7 +127,9 @@ export async function handleToolCall(
           content: [
             {
               type: "text",
-              text: `Created new browser session with ID: ${newSessionId}`,
+              text: `Created new browser session with ID: ${newSessionId}${
+                contextId ? ` using context: ${contextId}` : ''
+              }`,
             },
           ],
           isError: false,
@@ -153,8 +196,6 @@ export async function handleToolCall(
 
     // --- Execute Tool Logic ---
     switch (name) {
-      // browserbase_create_session handled above
-
       case "browserbase_navigate":
         return handleNavigate(page, args, targetSessionId);
 
