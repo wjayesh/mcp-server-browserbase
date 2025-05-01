@@ -19,6 +19,7 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js"; // Needed fo
 // Import specific tool handlers
 import { handleNavigate } from "./navigate.js";
 import { handleCreateContext, handleDeleteContext, getContextId } from "./context.js";
+import { handleAddCookies, handleDeleteCookies, handleGetCookies } from "./cookies.js";
 import {
   handleSnapshot,
   handleTakeScreenshot,
@@ -229,6 +230,18 @@ export async function handleToolCall(
 
       case "browserbase_get_text": {
         return handleGetText(page, args, targetSessionId);
+      }
+
+      case "browserbase_add_cookies": {
+        return handleAddCookies(page, args, targetSessionId);
+      }
+
+      case "browserbase_delete_cookies": {
+        return handleDeleteCookies(page, args, targetSessionId);
+      }
+
+      case "browserbase_get_cookies": {
+        return handleGetCookies(page, args, targetSessionId);
       }
 
       // Add cases for other potential tools, delegating to handleNotImplemented for now

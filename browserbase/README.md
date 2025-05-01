@@ -67,6 +67,31 @@ Contexts make it much easier to:
 - Reduce page load times by preserving cache
 - Avoid CAPTCHAs and detection by reusing browser fingerprints
 
+## Cookie Management
+
+This server also provides direct cookie management capabilities:
+
+1. **Adding Cookies**:
+   ```
+   browserbase_add_cookies: Add cookies to the current browser session with full control over properties
+   ```
+
+2. **Getting Cookies**:
+   ```
+   browserbase_get_cookies: View all cookies in the current session (optionally filtered by URLs)
+   ```
+
+3. **Deleting Cookies**:
+   ```
+   browserbase_delete_cookies: Delete specific cookies or clear all cookies from the session
+   ```
+
+These tools are useful for:
+- Setting authentication cookies without navigating to login pages
+- Backing up and restoring cookie state
+- Debugging cookie-related issues
+- Manipulating cookie attributes (expiration, security flags, etc.)
+
 ## TODO
 
 *   Implement true `ref`-based interaction logic for click, type, drag, hover, select_option.

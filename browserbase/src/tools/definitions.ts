@@ -334,6 +334,127 @@ export const TOOLS: Tool[] = [
       required: [], // selector is optional
     },
   },
+  {
+    name: "browserbase_add_cookies",
+    description: "Add cookies to the current browser session",
+    inputSchema: {
+      type: "object",
+      properties: {
+        cookies: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              name: {
+                type: "string",
+                description: "Cookie name"
+              },
+              value: {
+                type: "string",
+                description: "Cookie value"
+              },
+              domain: {
+                type: "string",
+                description: "Cookie domain (required)"
+              },
+              path: {
+                type: "string",
+                description: "Cookie path",
+                default: "/"
+              },
+              expires: {
+                type: "number",
+                description: "Cookie expiration time in seconds since epoch, or -1 for session cookies"
+              },
+              httpOnly: {
+                type: "boolean",
+                description: "Whether the cookie is HTTP-only"
+              },
+              secure: {
+                type: "boolean",
+                description: "Whether the cookie is secure"
+              },
+              sameSite: {
+                type: "string",
+                description: "Cookie same-site policy: 'Strict', 'Lax', or 'None'",
+                enum: ["Strict", "Lax", "None"]
+              }
+            },
+            required: ["name", "value", "domain"]
+          },
+          description: "Array of cookie objects to add to the browser"
+        },
+        sessionId: {
+          type: "string",
+          description: "Target session ID (optional, defaults to 'default')"
+        }
+      },
+      required: ["cookies"]
+    }
+  },
+  {
+    name: "browserbase_delete_cookies",
+    description: "Delete specific cookies from the current browser session",
+    inputSchema: {
+      type: "object",
+      properties: {
+        cookies: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              name: {
+                type: "string",
+                description: "Cookie name to delete"
+              },
+              domain: {
+                type: "string",
+                description: "Cookie domain (required for proper matching)"
+              },
+              path: {
+                type: "string",
+                description: "Cookie path",
+                default: "/"
+              }
+            },
+            required: ["name", "domain"]
+          },
+          description: "Array of cookie identifiers to delete"
+        },
+        all: {
+          type: "boolean",
+          description: "If true, delete all cookies (ignores the cookies array)",
+          default: false
+        },
+        sessionId: {
+          type: "string",
+          description: "Target session ID (optional, defaults to 'default')"
+        }
+      },
+      required: [] // Either cookies or all should be provided
+    }
+  },
+  {
+    name: "browserbase_get_cookies",
+    description: "Get all cookies from the current browser session",
+    inputSchema: {
+      type: "object",
+      properties: {
+        urls: {
+          type: "array",
+          items: {
+            type: "string"
+          },
+          description: "Optional list of URLs to get cookies for (if empty, gets all cookies)"
+        },
+        sessionId: {
+          type: "string",
+          description: "Target session ID (optional, defaults to 'default')"
+        }
+      },
+      required: []
+    }
+  },
   // Other standard tools like browser_tab_*, browser_navigate_back/forward etc.
   // could be added here if needed, potentially wrapping existing Playwright functions.
 ]; 
