@@ -15,7 +15,6 @@
   ],
   "scripts": {
     "build": "tsc && shx chmod +x dist/*.js",
-    "playwright": "tsc && shx chmod +x dist/playwright.js",
     "prepare": "npm run build",
     "watch": "tsc --watch",
     "inspector": "npx @modelcontextprotocol/inspector build/index.js"
