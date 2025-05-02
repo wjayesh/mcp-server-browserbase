@@ -22,27 +22,3 @@ to provide browser automation tools.
 ```bash
 node dist/index.js
 ```
-
-The server communicates over stdio according to the Model Context Protocol.
-
-## Structure
-
-*   `src/`: TypeScript source code
-    *   `index.ts`: Main entry point, env checks, shutdown
-    *   `server.ts`: MCP Server setup and request routing
-    *   `sessionManager.ts`: Handles Browserbase session creation/management
-    *   `tools/`: Tool definitions and implementations
-    *   `resources/`: Resource (screenshot) handling
-    *   `types.ts`: Shared TypeScript types
-*   `dist/`: Compiled JavaScript output
-*   `tests/`: Placeholder for tests
-*   `utils/`: Placeholder for utility scripts
-*   `Dockerfile`: For building a Docker image
-*   Configuration files (`.json`, `.ts`, `.mjs`, `.npmignore`)
-
-## TODO
-
-*   Implement true `ref`-based interaction logic for click, type, drag, hover, select_option.
-*   Implement element-specific screenshots using `ref`.
-*   Add more standard Playwright MCP tools (tabs, navigation, etc.).
-*   Add tests.
