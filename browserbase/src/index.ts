@@ -1,88 +1,104 @@
 #!/usr/bin/env node
 
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { closeAllSessions } from "./sessionManager.js";
-import { createServer } from "./server.js"; // Import the factory function
-import { resolveConfig } from "./config.js";
-import type { Tool } from "./tools/tool.js"; // Import Tool type
-import type { Config } from "./config.js"; // Import Config type for potential filtering later
+// Load environment variables early
+import dotenv from "dotenv";
+dotenv.config();
 
-// Import tool module factory functions (using default imports)
-import navigate from "./tools/navigate.js"; 
-import snapshot from "./tools/snapshot.js"; // Bundles snapshot, screenshot, click, type
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { createServer } from "./server.js";
+import { resolveConfig, type CLIOptions } from "./config.js";
+import type { Tool } from "./tools/tool.js";
+
+import navigate from "./tools/navigate.js";
+import snapshot from "./tools/snapshot.js";
 import keyboard from "./tools/keyboard.js";
 import getText from "./tools/getText.js";
 import session from "./tools/session.js";
 import common from "./tools/common.js";
-// Import placeholder factories
 import drag from "./tools/drag.js";
 import hover from "./tools/hover.js";
 import selectOption from "./tools/selectOption.js";
 
-// Import package.json for version (adjust path if needed)
-// Note: Using require for JSON might be needed depending on tsconfig module resolution
-// import packageJSON from '../package.json' assert { type: 'json' }; 
-// Alternatively, define version manually for now if import causes issues
-const serverVersion = "0.5.1"; // Manually set from package.json
+// Environment variables configuration
+const requiredEnvVars = {
+  BROWSERBASE_API_KEY: process.env.BROWSERBASE_API_KEY,
+  BROWSERBASE_PROJECT_ID: process.env.BROWSERBASE_PROJECT_ID,
+};
+
+// Validate required environment variables
+Object.entries(requiredEnvVars).forEach(([name, value]) => {
+  if (!value) throw new Error(`${name} environment variable is required`);
+});
+
+const serverVersion = "0.5.1";
 
 async function main() {
-    // Load configuration
-    const config = resolveConfig();
+  const cliOptions: CLIOptions = {};
+  const config = await resolveConfig(cliOptions);
 
-    // --- Assemble the list of tools --- 
-    // Call the factory functions to get the tool arrays
-    // Rename to snapshotTools to reflect the interaction model
-    const snapshotTools: Tool<any>[] = [
-        ...common(true),
-        ...keyboard(true),
-        ...navigate(true),
-        ...snapshot(true),
-        ...getText(true),
-        ...session(true),
-    ];
-    
-    // TODO: Filter tools based on config.capabilities if needed
-    const toolsToUse = snapshotTools; 
+  // Assume true for captureSnapshot for keyboard, adjust if needed
+  const captureSnapshotFlag = true; 
 
-    // --- Create Server Instance using Factory --- 
-    const server = createServer(
-        { 
-            name: "Browserbase",
-            version: serverVersion,
-            tools: toolsToUse 
-        },
-        config
-    );
+  const tools: Tool<any>[] = [
+    ...common,
+    ...snapshot,
+    ...keyboard(captureSnapshotFlag), // Call the function and spread the result array
+    // getText,    // Include the tool object directly
+    // navigate,   // Include the tool object directly
+    // session,    // Include the tool object directly
+    ...getText,    // Spread the array exported by getText.ts
+    ...navigate,   // Spread the array exported by navigate.ts
+    session,       // Add the single tool object directly
+  ];
 
-    // --- Setup Shutdown Handler --- 
-const signals: NodeJS.Signals[] = ["SIGINT", "SIGTERM"];
-signals.forEach((signal) => {
-  process.on(signal, async () => {
-    console.error(`
+  const toolsToUse = tools;
+
+  const server = createServer(
+    {
+      name: "Browserbase",
+      version: serverVersion,
+      tools: toolsToUse,
+    },
+    config
+  );
+
+  const signals: NodeJS.Signals[] = ["SIGINT", "SIGTERM"];
+  signals.forEach((signal) => {
+    process.on(signal, async () => {
+      console.error(`
 Received ${signal}. Shutting down gracefully...`);
-            try {
-                await server.close(); 
-            } catch (shutdownError) {
-            }
-          process.exit(0);
-        });
-});
+      try {
+        await server.close();
+        console.error("Server closed.");
+      } catch (shutdownError) {
+        console.error("Error during shutdown:", shutdownError);
+      } finally {
+        process.exit(0);
+      }
+    });
+  });
 
-    // --- Connect and Run Server --- 
-    try {
-        const transport = new StdioServerTransport();
-        await server.connect(transport);
-    } catch (error) {
-        process.exit(1);
-    }
+  try {
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+    console.log("Browserbase MCP server connected via stdio.");
+  } catch (error) {
+    console.error("Failed to connect server:", error);
+    process.exit(1);
+  }
 }
 
-// Start the main function
 main().catch((err) => {
-    process.exit(1);
+  console.error("Error starting server:", err);
+  process.exit(1);
 });
 
-// Catch unhandled errors
 process.on("uncaughtException", (err) => {
-    process.exit(1);
+  console.error("Unhandled exception:", err);
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("Unhandled Rejection at:", promise, "reason:", reason);
+  process.exit(1);
 });

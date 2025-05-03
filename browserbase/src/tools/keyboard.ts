@@ -1,8 +1,11 @@
 import { z } from 'zod'; // Ensure Zod is imported
 import { Page, errors as PlaywrightErrors } from "playwright-core";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import type { InputType, Tool, ToolContext, ToolSchema } from "./tool.js";
+import type { InputType, Tool, ToolContext, ToolSchema, ToolResult } from "./tool.js";
 import { createErrorResult, createSuccessResult } from "./toolUtils.js";
+import type { Context } from '../context.js'; // For handle signature
+import type { ToolActionResult } from '../context.js'; // For action return type
+import { defineTool, type ToolFactory } from './tool.js'; // Assuming tool.js path is correct relative to keyboard.ts
 
 // Helper function to map common key names (basic implementation)
 function mapPlaywrightKey(key: string): string {
@@ -10,66 +13,98 @@ function mapPlaywrightKey(key: string): string {
     return key;
 }
 
-// --- Tool: browserbase_press_key ---
-
-// 1. Define Zod Schema
+// --- Tool: Press Key ---
 const PressKeyInputSchema = z.object({
-    key: z.string().describe("The key to press (e.g., 'Enter', 'Tab', 'a', 'Shift+A')."),
-    selector: z.string().optional().describe("Optional selector for target element."),
-    sessionId: z.string().optional().describe("Session ID"),
+    key: z.string().describe("Key to press (e.g., 'Enter', 'Tab', 'a', 'Shift+A')"),
+    selector: z.string().optional().describe("Optional CSS selector for target element"),
+    sessionId: z.string().optional(),
 });
-// 2. Infer TS Type
 type PressKeyInput = z.infer<typeof PressKeyInputSchema>;
 
-// 3. Define ToolSchema using generic
 const pressKeySchema: ToolSchema<typeof PressKeyInputSchema> = {
     name: "browserbase_press_key",
     description: "Press a specific key on a selected element or globally.",
-    inputSchema: PressKeyInputSchema, // Assign Zod schema
+    inputSchema: PressKeyInputSchema,
 };
 
-// 4. Implement run function using inferred type
-async function runPressKey(context: ToolContext, args: PressKeyInput): Promise<CallToolResult> {
-    const toolName = pressKeySchema.name;
-    const { key, selector, sessionId } = args;
-    
-    const delayMs = 50;
-
-    const page = await context.context.getActivePage();
-    
-    if (!page) return createErrorResult("No active page", toolName);
-
-    const mappedKey = mapPlaywrightKey(key);
-    
-    try {
-        if (selector) {
-            const locator = page.locator(selector);
-            await locator.press(mappedKey, { delay: delayMs });
-            return createSuccessResult(`Pressed '${key}' on element ${selector}`, toolName);
-        } else {
-            await page.keyboard.press(mappedKey, { delay: delayMs });
-            return createSuccessResult(`Pressed '${key}' globally`, toolName);
+// Handle function for PressKey
+async function handlePressKey(context: Context, params: PressKeyInput): Promise<ToolResult> {
+    const action = async (): Promise<ToolActionResult> => {
+        const page = await context.getActivePage();
+        if (!page) {
+            throw new Error('No active page found for pressKey');
         }
-    } catch (error) {
-        let errorMessage = `Failed to press key "${key}".`;
-        if (error instanceof PlaywrightErrors.TimeoutError) errorMessage += " Timeout.";
-        else errorMessage += ` ${(error as Error).message}`;
-        return createErrorResult(errorMessage, toolName);
-    }
+        try {
+            if (params.selector) {
+                await page.press(params.selector, params.key, { timeout: 10000 });
+            } else {
+                await page.keyboard.press(params.key);
+            }
+            return { content: [{ type: 'text', text: `Pressed key: ${params.key}${params.selector ? ' on ' + params.selector : ' globally'}` }] };
+        } catch (error) {
+            console.error(`PressKey action failed: ${error}`);
+            throw error; // Rethrow
+        }
+    };
+
+    return {
+        action,
+        code: [], // Add code property
+        captureSnapshot: true, // Pressing key might change state
+        waitForNetwork: true, // Pressing key might trigger navigation/requests
+    };
 }
 
-// 5. Define Tool using generic
-const pressKeyTool: Tool<typeof PressKeyInputSchema> = {
-    schema: pressKeySchema,
-    run: runPressKey,
-};
+// Define tool using handle
+// const pressKeyTool: Tool<typeof PressKeyInputSchema> = {
+//     capability: 'core', // Add capability
+//     schema: pressKeySchema,
+//     handle: handlePressKey,
+// };
 
-// Export factory function
-export function keyboard(captureSnapshot: boolean): Tool<any>[] {
-    // captureSnapshot flag currently ignored
-    return [pressKeyTool];
-}
-export default keyboard;
+// Export the single tool object as default
+// export default pressKeyTool; // <-- REMOVE THIS LINE
 
 // Original handler (logic now in runPressKey)
 // export async function handlePressKey(...) { ... } 
+
+const pressKey: ToolFactory = captureSnapshot => defineTool({
+  capability: 'core',
+
+  schema: {
+    name: 'browser_press_key', // Renamed from browserbase_press_key
+    description: 'Press a key on the keyboard',
+    inputSchema: z.object({
+      key: z.string().describe('Name of the key to press or a character to generate, such as `ArrowLeft` or `a`'),
+      // NOTE: Removed selector and sessionId from original file based on user's code
+    }),
+  },
+
+  handle: async (context, params) => {
+    // Using context.getActivePage() assuming it's the correct way to get the page
+    const page = await context.getActivePage();
+    if (!page) {
+      throw new Error('No active page found for pressKey');
+    }
+
+    // Changed from tab.page to page based on search results context
+    const code = [
+      `// Press ${params.key}`,
+      `await page.keyboard.press('${params.key.replace(/'/g, "\\'")}');`, // Added escaping for key
+    ];
+
+    const action = () => page.keyboard.press(params.key); // Changed from tab.page to page
+
+    return {
+      code,
+      action,
+      captureSnapshot, // Passed from factory
+      waitForNetwork: true // Kept from user's code
+    };
+  },
+});
+
+// Changed export to match the factory pattern
+export default (captureSnapshot: boolean) => [
+  pressKey(captureSnapshot),
+]; 

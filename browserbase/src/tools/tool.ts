@@ -1,48 +1,74 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js'; // Keep only CallToolResult
-import type { BrowserSession } from '../sessionManager.js'; // Context needs session
-import type { Server } from '@modelcontextprotocol/sdk/server/index.js'; // For notifications
-import type { Config } from '../config.js'; // Import Config type
-import type { Context } from '../context.js'; // Forward declaration for context property
-import { z } from 'zod';
+/**
+ * Copyright (c) Microsoft Corporation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
-// Represents the execution context for a tool
-// Might include the page, server instance for notifications, etc.
-export interface ToolContext {
-    page: BrowserSession['page'];
-    browser: BrowserSession['browser'];
-    server: Server;
-    // Add other context if needed, e.g., session ID
-    sessionId: string;
-    config: Config; // Add config to context
-    context: Context; // Add context itself for access to e.g. addScreenshot
-}
+import type { ImageContent, TextContent } from '@modelcontextprotocol/sdk/types.js';
+import type { z } from 'zod';
+import type { Context } from '../context.js';
+import type * as playwright from 'playwright';
+import type { ToolCapability } from '../config.js'; // Corrected path assuming config.ts is in src/
+import type { BrowserSession } from '../sessionManager.js'; // Import BrowserSession
+import type { Server } from '@modelcontextprotocol/sdk/server/index.js'; // For ToolContext
+import type { Config } from '../config.js'; // For ToolContext
 
-// Input type alias based on Zod Schema
-export type InputType = z.Schema;
-
-// ToolSchema expects a Zod schema for inputSchema
-export type ToolSchema<Input extends InputType = InputType> = {
-    name: string;
-    description: string;
-    inputSchema: Input; // Use the Zod schema type
+export type ToolSchema<Input extends InputType> = {
+  name: string;
+  description: string;
+  inputSchema: Input;
 };
 
-// Tool interface DEFINITIVELY uses run and CallToolResult
-export interface Tool<Input extends InputType = InputType, Output = CallToolResult> {
+// Export InputType
+export type InputType = z.Schema;
+
+export type FileUploadModalState = {
+  type: 'fileChooser';
+  description: string;
+  fileChooser: playwright.FileChooser;
+};
+
+export type DialogModalState = {
+  type: 'dialog';
+  description: string;
+  dialog: playwright.Dialog;
+};
+
+export type ModalState = FileUploadModalState | DialogModalState;
+
+export type ToolActionResult = { content?: (ImageContent | TextContent)[] } | undefined | void;
+
+export type ToolResult = {
+  code: string[];
+  action?: () => Promise<ToolActionResult>;
+  captureSnapshot: boolean;
+  waitForNetwork: boolean;
+  resultOverride?: ToolActionResult;
+};
+
+export type Tool<Input extends InputType = InputType> = {
+    capability: ToolCapability;
     schema: ToolSchema<Input>;
-    // Use run, expecting args inferred from Zod schema
-    run: (context: ToolContext, args: z.infer<Input>) => Promise<Output>;
-}
-
-// --- REMOVED Handle-based types --- 
-// export type ToolCapability = ...;
-// export type ModalState = ...;
-// export type ToolActionResult = ...;
-// export type ToolResult = ...;
-// export interface ToolHandleBased<...> { ... }
-// export type ToolFactory = ...; 
-// export function defineTool<...> { ... }
-
+    clearsModalState?: ModalState['type'];
+    handle: (context: Context, params: z.output<Input>) => Promise<ToolResult>;
+  };
+  
+  export type ToolFactory = (snapshot: boolean) => Tool<any>;
+  
+  export function defineTool<Input extends InputType>(tool: Tool<Input>): Tool<Input> {
+    return tool;
+  }
+  
 export {}; // Ensure this is treated as a module 
 
 // --- Types needed for Playwright-style handle pattern (Keep for reference/potential future use) ---
@@ -62,3 +88,14 @@ export {}; // Ensure this is treated as a module
 // --- End of Handle-based types ---
 
 export {}; 
+
+// Represents the execution context for a tool
+// Might include the page, server instance for notifications, etc.
+export interface ToolContext {
+    page: BrowserSession['page'];
+    browser: BrowserSession['browser'];
+    server: Server;
+    sessionId: string;
+    config: Config;
+    context: Context; // The main context instance
+} 

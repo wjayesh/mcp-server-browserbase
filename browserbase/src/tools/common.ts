@@ -11,91 +11,118 @@
 export {}; // Ensure file is treated as a module 
 
 import { z } from 'zod';
-import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import type { InputType, Tool, ToolContext, ToolSchema } from "./tool.js";
-import { createErrorResult, createSuccessResult } from "./toolUtils.js";
-import type { Context } from '../context.js'; // Only needed for type checking
-import { errors as PlaywrightErrors } from "playwright-core"; // Needed for error checking
+import type { Tool, ToolSchema, ToolContext, ToolResult } from "./tool.js"; // Assuming ToolContext is needed if handle uses context
+import type { Context } from '../context.js'; // Import main Context for handle
+import type { ToolActionResult } from '../context.js'; // Import ToolActionResult
 
-// --- Tool: browser_wait ---
+// Assuming createSuccessResult/createErrorResult exist in toolUtils.js
+import { createSuccessResult, createErrorResult } from './toolUtils.js';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+
+// --- Tool: Wait ---
 const WaitInputSchema = z.object({
-    time: z.number().min(0).describe("Time in seconds"),
+    time: z.number().describe("Time in seconds")
 });
 type WaitInput = z.infer<typeof WaitInputSchema>;
 
 const waitSchema: ToolSchema<typeof WaitInputSchema> = {
-    name: "browser_wait",
+    name: "browserbase_wait",
     description: "Wait for a specified time in seconds",
     inputSchema: WaitInputSchema,
 };
-async function runWait(context: ToolContext, args: WaitInput): Promise<CallToolResult> {
-    const toolName = waitSchema.name;
-    const timeInSeconds = args.time;
-    const waitMs = Math.min(30000, timeInSeconds * 1000);
-    try {
-        await new Promise(resolve => setTimeout(resolve, waitMs));
-        return createSuccessResult(`Waited for ${waitMs / 1000} seconds.`, toolName);
-    } catch (error) {
-        return createErrorResult(`Wait failed: ${(error as Error).message}`, toolName);
-    }
-}
-const waitTool: Tool<typeof WaitInputSchema> = { schema: waitSchema, run: runWait };
 
-// --- Tool: browser_close ---
-const CloseInputSchema = z.object({});
+// Handle function for Wait
+async function handleWait(context: Context, params: WaitInput): Promise<ToolResult> { // Uses Context, returns ToolResult
+    const action = async (): Promise<ToolActionResult> => {
+        await new Promise(resolve => setTimeout(resolve, params.time * 1000));
+        return { content: [{ type: 'text', text: `Waited for ${params.time} seconds.` }] };
+    };
+    return { action, code: [], captureSnapshot: false, waitForNetwork: false };
+}
+
+// Define tool using handle
+const waitTool: Tool<typeof WaitInputSchema> = {
+    capability: 'core', // Add capability
+    schema: waitSchema,
+    handle: handleWait,
+};
+
+
+// --- Tool: Close ---
+const CloseInputSchema = z.object({
+    random_string: z.string().optional().describe("Dummy parameter") // Keep schema if needed
+});
 type CloseInput = z.infer<typeof CloseInputSchema>;
+
 const closeSchema: ToolSchema<typeof CloseInputSchema> = {
-    name: "browser_close",
+    name: "browserbase_close",
     description: "Close the current page...",
     inputSchema: CloseInputSchema,
 };
-async function runClose(context: ToolContext, args: CloseInput): Promise<CallToolResult> {
-    const { page, sessionId } = context;
-    const toolName = closeSchema.name;
-    if (!page) return createErrorResult("No active page", toolName);
-    try {
-        await page.close();
-        return createSuccessResult(`Closed page`, toolName);
-    } catch (error) {
-        return createErrorResult(`Close failed: ${(error as Error).message}`, toolName);
-    }
-}
-const closeTool: Tool<typeof CloseInputSchema> = { schema: closeSchema, run: runClose };
 
-// --- Tool: browser_resize ---
+// Handle function for Close
+async function handleClose(context: Context, params: CloseInput): Promise<ToolResult> {
+    const action = async (): Promise<ToolActionResult> => {
+        const page = await context.getActivePage();
+        if (page && !page.isClosed()) {
+            await page.close();
+            return { content: [{ type: 'text', text: `Page closed.` }] };
+        } else {
+            return { content: [{ type: 'text', text: `No active page to close.` }] };
+        }
+    };
+    return { action, code: [], captureSnapshot: false, waitForNetwork: false };
+}
+
+// Define tool using handle
+const closeTool: Tool<typeof CloseInputSchema> = {
+    capability: 'core', // Add capability
+    schema: closeSchema,
+    handle: handleClose,
+};
+
+
+// --- Tool: Resize ---
 const ResizeInputSchema = z.object({
-    width: z.number().int().positive(),
-    height: z.number().int().positive(),
+    width: z.number(),
+    height: z.number()
 });
 type ResizeInput = z.infer<typeof ResizeInputSchema>;
+
 const resizeSchema: ToolSchema<typeof ResizeInputSchema> = {
-    name: "browser_resize",
+    name: "browserbase_resize",
     description: "Resize window...",
     inputSchema: ResizeInputSchema,
 };
-async function runResize(context: ToolContext, args: ResizeInput): Promise<CallToolResult> {
-    const { page, sessionId } = context;
-    const toolName = resizeSchema.name;
-    if (!page) return createErrorResult("No active page", toolName);
-    try {
-        await page.setViewportSize({ width: args.width, height: args.height });
-        return createSuccessResult(`Attempted resize`, toolName);
-    } catch (error) {
-        return createErrorResult(`Resize failed: ${(error as Error).message}`, toolName);
-    }
-}
-const resizeTool: Tool<typeof ResizeInputSchema> = { schema: resizeSchema, run: runResize };
 
-// Default export function returning the array of Tool objects
-export function common(captureSnapshot: boolean): Tool<any>[] {
-    // TODO: Use captureSnapshot to potentially configure tools if needed
-    return [
-        waitTool,
-        closeTool,
-        resizeTool,
-    ];
+// Handle function for Resize
+async function handleResize(context: Context, params: ResizeInput): Promise<ToolResult> {
+    const action = async (): Promise<ToolActionResult> => {
+        const page = await context.getActivePage();
+        if (page && !page.isClosed()) {
+            await page.setViewportSize({ width: params.width, height: params.height });
+            return { content: [{ type: 'text', text: `Resized page to ${params.width}x${params.height}.` }] };
+        } else {
+            return { content: [{ type: 'text', text: `No active page to resize.` }] };
+        }
+    };
+    return { action, code: [], captureSnapshot: true, waitForNetwork: false };
 }
-export default common;
+
+// Define tool using handle
+const resizeTool: Tool<typeof ResizeInputSchema> = {
+    capability: 'core', // Add capability
+    schema: resizeSchema,
+    handle: handleResize,
+};
+
+
+// Export array of tools directly
+export default [
+    waitTool,
+    closeTool,
+    resizeTool,
+];
 
 // Remove old direct exports
 // export const waitTool: Tool<WaitInput> = { ... };

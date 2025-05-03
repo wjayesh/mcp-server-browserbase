@@ -1,13 +1,15 @@
 import { z } from 'zod';
-import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import type { InputType, Tool, ToolContext, ToolSchema } from "./tool.js";
+import { Page, errors as PlaywrightErrors } from "playwright-core";
+import type { Tool, ToolSchema, ToolContext, ToolResult } from "./tool.js";
 import { createErrorResult, createSuccessResult } from "./toolUtils.js";
 import type { Context } from '../context.js';
+import type { ToolActionResult } from '../context.js';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 // Define Zod schema
 const NavigateInputSchema = z.object({
-    url: z.string().url().describe("URL"),
-    sessionId: z.string().optional().describe("Session ID"), 
+    url: z.string().url().describe("URL to navigate to"),
+    sessionId: z.string().optional(),
 });
 type NavigateInput = z.infer<typeof NavigateInputSchema>;
 
@@ -17,28 +19,39 @@ const navigateSchema: ToolSchema<typeof NavigateInputSchema> = {
     inputSchema: NavigateInputSchema,
 };
 
-async function runNavigate(context: ToolContext, args: NavigateInput): Promise<CallToolResult> {
-    const { page, sessionId } = context;
-    const toolName = navigateSchema.name;
-    if (!page) return createErrorResult("No active page", toolName);
-    try {
-        await page.goto(args.url, { waitUntil: "domcontentloaded", timeout: 60000 });
-        return createSuccessResult(`Navigated to ${args.url}`, toolName);
-    } catch (error) {
-        return createErrorResult(`Navigation failed: ${(error as Error).message}`, toolName);
-    }
+// Handle function for Navigate
+async function handleNavigate(context: Context, params: NavigateInput): Promise<ToolResult> {
+    const action = async (): Promise<ToolActionResult> => {
+        const page = await context.getActivePage();
+        if (!page) {
+            throw new Error('No active page found for navigate');
+        }
+        try {
+            await page.goto(params.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            return { content: [{ type: 'text', text: `Navigated to ${params.url}` }] };
+        } catch (error) {
+            console.error(`Navigate action failed: ${error}`);
+            throw error; // Rethrow
+        }
+    };
+
+    return {
+        action,
+        code: [], // Add code property
+        captureSnapshot: true, // Navigation changes page state
+        waitForNetwork: false, // page.goto handles waiting implicitly
+    };
 }
 
+// Define tool using handle
 const navigateTool: Tool<typeof NavigateInputSchema> = {
+    capability: 'core', // Add capability
     schema: navigateSchema,
-    run: runNavigate,
+    handle: handleNavigate,
 };
 
-// Export factory function
-export function navigate(captureSnapshot: boolean): Tool<any>[] {
-    return [navigateTool];
-}
-export default navigate;
+// Export the single tool object as default
+export default [navigateTool]; // Export as an array containing the tool
 
 // If you have multiple navigation tools (back, forward), group them:
 // export const navigationTools: Tool[] = [navigateTool, backTool, forwardTool];
