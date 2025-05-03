@@ -46,12 +46,12 @@ This server supports Browserbase's Contexts feature, which allows persisting coo
 
 1. **Creating a Context**:
    ```
-   browserbase_create_context: Creates a new context, optionally with a friendly name
+   browserbase_context_create: Creates a new context, optionally with a friendly name
    ```
 
 2. **Using a Context with a Session**:
    ```
-   browserbase_create_session: Now accepts a 'context' parameter with:
+   browserbase_session_create: Now accepts a 'context' parameter with:
      - id: The context ID to use
      - name: Alternative to ID, the friendly name of the context
      - persist: Whether to save changes (cookies, cache) back to the context (default: true)
@@ -59,7 +59,7 @@ This server supports Browserbase's Contexts feature, which allows persisting coo
 
 3. **Deleting a Context**:
    ```
-   browserbase_delete_context: Deletes a context when you no longer need it
+   browserbase_context_delete: Deletes a context when you no longer need it
    ```
 
 Contexts make it much easier to:
@@ -73,17 +73,17 @@ This server also provides direct cookie management capabilities:
 
 1. **Adding Cookies**:
    ```
-   browserbase_add_cookies: Add cookies to the current browser session with full control over properties
+   browserbase_cookies_add: Add cookies to the current browser session with full control over properties
    ```
 
 2. **Getting Cookies**:
    ```
-   browserbase_get_cookies: View all cookies in the current session (optionally filtered by URLs)
+   browserbase_cookies_get: View all cookies in the current session (optionally filtered by URLs)
    ```
 
 3. **Deleting Cookies**:
    ```
-   browserbase_delete_cookies: Delete specific cookies or clear all cookies from the session
+   browserbase_cookies_delete: Delete specific cookies or clear all cookies from the session
    ```
 
 These tools are useful for:

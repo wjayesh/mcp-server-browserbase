@@ -1,74 +1,116 @@
-import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { z } from "zod";
+import type { Tool, ToolSchema, ToolContext, ToolResult } from "./tool.js";
+import { createSuccessResult, createErrorResult } from "./toolUtils.js";
+import type { Context } from "../context.js";
+import type { ToolActionResult } from "../context.js";
 import { Browserbase } from "@browserbasehq/sdk";
 
 // Store contexts in memory 
 // In a production app, these should be persisted to a database
 const contexts = new Map<string, string>();
 
-export async function handleCreateContext(args: any): Promise<CallToolResult> {
+// --- Tool: Create Context ---
+const CreateContextInputSchema = z.object({
+  name: z
+    .string()
+    .optional()
+    .describe("Optional friendly name to reference this context later (otherwise, you'll need to use the returned ID)"),
+});
+type CreateContextInput = z.infer<typeof CreateContextInputSchema>;
+
+const createContextSchema: ToolSchema<typeof CreateContextInputSchema> = {
+  name: "browserbase_context_create",
+  description: "Create a new Browserbase context for reusing cookies, authentication, and cached data across browser sessions",
+  inputSchema: CreateContextInputSchema,
+};
+
+async function handleCreateContext(
+  context: Context,
+  params: CreateContextInput
+): Promise<ToolResult> {
   try {
+    const config = context.getConfig();
+    
+    if (!config.browserbaseApiKey || !config.browserbaseProjectId) {
+      throw new Error("Browserbase API Key or Project ID is missing in the configuration");
+    }
+    
     const bb = new Browserbase({
-      apiKey: process.env.BROWSERBASE_API_KEY!,
+      apiKey: config.browserbaseApiKey,
     });
 
     console.error("Creating new Browserbase context");
-    const context = await bb.contexts.create({
-      projectId: process.env.BROWSERBASE_PROJECT_ID!,
+    const bbContext = await bb.contexts.create({
+      projectId: config.browserbaseProjectId,
     });
 
-    console.error(`Successfully created context: ${context.id}`);
+    console.error(`Successfully created context: ${bbContext.id}`);
     
     // Store context ID with optional name if provided
-    const contextName = args.name || context.id;
-    contexts.set(contextName, context.id);
+    const contextName = params.name || bbContext.id;
+    contexts.set(contextName, bbContext.id);
     
-    return {
+    const result: ToolActionResult = {
       content: [
         {
           type: "text",
-          text: `Created new Browserbase context with ID: ${context.id}${args.name ? ` and name: ${args.name}` : ''}`,
+          text: `Created new Browserbase context with ID: ${bbContext.id}${params.name ? ` and name: ${params.name}` : ''}`,
         },
       ],
-      isError: false,
     };
-  } catch (error) {
-    console.error(
-      `Failed to create Browserbase context: ${(error as Error).message}`
-    );
+
     return {
-      content: [
-        {
-          type: "text",
-          text: `Failed to create Browserbase context: ${(error as Error).message}`,
-        },
-      ],
-      isError: true,
+      resultOverride: result,
+      code: [],
+      captureSnapshot: false,
+      waitForNetwork: false,
     };
+  } catch (error: any) {
+    console.error(`CreateContext handle failed: ${error.message || error}`);
+    throw new Error(`Failed to create Browserbase context: ${error.message || error}`);
   }
 }
 
-export async function handleDeleteContext(args: any): Promise<CallToolResult> {
+// --- Tool: Delete Context ---
+const DeleteContextInputSchema = z.object({
+  contextId: z
+    .string()
+    .optional()
+    .describe("The context ID to delete (required if name not provided)"),
+  name: z
+    .string()
+    .optional()
+    .describe("The friendly name of the context to delete (required if contextId not provided)"),
+});
+type DeleteContextInput = z.infer<typeof DeleteContextInputSchema>;
+
+const deleteContextSchema: ToolSchema<typeof DeleteContextInputSchema> = {
+  name: "browserbase_context_delete",
+  description: "Delete a Browserbase context when you no longer need it",
+  inputSchema: DeleteContextInputSchema,
+};
+
+async function handleDeleteContext(
+  context: Context,
+  params: DeleteContextInput
+): Promise<ToolResult> {
   try {
-    if (!args.contextId && !args.name) {
-      return {
-        content: [{ type: "text", text: "Missing required argument: either contextId or name must be provided" }],
-        isError: true,
-      };
+    const config = context.getConfig();
+    
+    if (!config.browserbaseApiKey) {
+      throw new Error("Browserbase API Key is missing in the configuration");
+    }
+    
+    if (!params.contextId && !params.name) {
+      throw new Error("Missing required argument: either contextId or name must be provided");
     }
 
-    const bb = new Browserbase({
-      apiKey: process.env.BROWSERBASE_API_KEY!,
-    });
-
     // Resolve context ID either directly or by name
-    let contextId = args.contextId;
-    if (!contextId && args.name) {
-      contextId = contexts.get(args.name);
+    let contextId = params.contextId;
+    if (!contextId && params.name) {
+      contextId = contexts.get(params.name);
       if (!contextId) {
-        return {
-          content: [{ type: "text", text: `Context with name "${args.name}" not found` }],
-          isError: true,
-        };
+        throw new Error(`Context with name "${params.name}" not found`);
       }
     }
 
@@ -79,7 +121,7 @@ export async function handleDeleteContext(args: any): Promise<CallToolResult> {
     const response = await fetch(`https://api.browserbase.com/v1/contexts/${contextId}`, {
       method: 'DELETE',
       headers: {
-        'X-BB-API-Key': process.env.BROWSERBASE_API_KEY!,
+        'X-BB-API-Key': config.browserbaseApiKey,
       },
     });
     
@@ -89,8 +131,8 @@ export async function handleDeleteContext(args: any): Promise<CallToolResult> {
     }
     
     // Remove from local store
-    if (args.name) {
-      contexts.delete(args.name);
+    if (params.name) {
+      contexts.delete(params.name);
     }
     
     // Delete by ID too (in case it was stored multiple ways)
@@ -101,32 +143,29 @@ export async function handleDeleteContext(args: any): Promise<CallToolResult> {
     }
     
     console.error(`Successfully deleted context: ${contextId}`);
-    return {
+    
+    const result: ToolActionResult = {
       content: [
         {
           type: "text",
           text: `Deleted Browserbase context with ID: ${contextId}`,
         },
       ],
-      isError: false,
     };
-  } catch (error) {
-    console.error(
-      `Failed to delete Browserbase context: ${(error as Error).message}`
-    );
+
     return {
-      content: [
-        {
-          type: "text", 
-          text: `Failed to delete Browserbase context: ${(error as Error).message}`,
-        },
-      ],
-      isError: true,
+      resultOverride: result,
+      code: [],
+      captureSnapshot: false,
+      waitForNetwork: false,
     };
+  } catch (error: any) {
+    console.error(`DeleteContext handle failed: ${error.message || error}`);
+    throw new Error(`Failed to delete Browserbase context: ${error.message || error}`);
   }
 }
 
-// Helper function to get a context ID from name or direct ID
+// Helper function to get a context ID from name or direct ID (exported for use by session.ts)
 export function getContextId(nameOrId: string): string | undefined {
   // First check if it's a direct context ID
   if (nameOrId.length > 20) {  // Assumption: context IDs are long strings
@@ -135,4 +174,20 @@ export function getContextId(nameOrId: string): string | undefined {
   
   // Otherwise, look it up by name
   return contexts.get(nameOrId);
-} 
+}
+
+// Define tools
+const createContextTool: Tool<typeof CreateContextInputSchema> = {
+  capability: "core",
+  schema: createContextSchema,
+  handle: handleCreateContext,
+};
+
+const deleteContextTool: Tool<typeof DeleteContextInputSchema> = {
+  capability: "core",
+  schema: deleteContextSchema,
+  handle: handleDeleteContext,
+};
+
+// Export as an array of tools
+export default [createContextTool, deleteContextTool]; 

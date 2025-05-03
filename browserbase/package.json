@@ -22,8 +22,9 @@
   "dependencies": {
     "@browserbasehq/sdk": "^2.0.0",
     "@modelcontextprotocol/sdk": "^1.10.2",
+    "playwright-core": "^1.45.3",
     "puppeteer-core": "^23.9.0",
-    "playwright-core": "^1.45.3"
+    "zod": "^3.24.3"
   },
   "devDependencies": {
     "shx": "^0.3.4",

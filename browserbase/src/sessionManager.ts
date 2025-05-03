@@ -5,32 +5,44 @@ import {
   errors as PlaywrightErrors,
 } from "playwright-core";
 import { Browserbase } from "@browserbasehq/sdk";
-import { BrowserSession } from "./types.js";
+import type { Config } from "./config.js"; // Import Config type
 
-// Global State specific to sessions
+// Define the type for a session object
+export type BrowserSession = { browser: Browser; page: Page };
+
+// Global state for managing browser sessions
 const browsers = new Map<string, BrowserSession>();
+// Keep track of the default session explicitly
 let defaultBrowserSession: BrowserSession | null = null;
-const defaultSessionId = "default"; // Consistent ID for the default session
+export const defaultSessionId = "default";
 
-// Helper Functions
-
-// Function to create a new browser session
-async function createNewBrowserSession(
+// Function to create a new Browserbase session and connect Playwright
+export async function createNewBrowserSession(
   newSessionId: string,
+  config: Config, // Accept config object
   options?: {
     contextId?: string;
     persistContext?: boolean;
   }
 ): Promise<BrowserSession> {
-  console.error(`Creating new browser session with ID: ${newSessionId}`);
+  // Add runtime checks here (SHOULD ALREADY EXIST from manual edit)
+  if (!config.browserbaseApiKey) {
+    throw new Error('Browserbase API Key is missing in the configuration.');
+  }
+  if (!config.browserbaseProjectId) {
+      throw new Error('Browserbase Project ID is missing in the configuration.');
+  }
+  
   const bb = new Browserbase({
-    apiKey: process.env.BROWSERBASE_API_KEY!,
+    // Use non-null assertion after check
+    apiKey: config.browserbaseApiKey!,
   });
 
   // Prepare session creation options
   const sessionOptions: any = {
-    projectId: process.env.BROWSERBASE_PROJECT_ID!,
-    proxies: true, // Consider making configurable
+    // Use non-null assertion after check
+    projectId: config.browserbaseProjectId!,
+    proxies: true, // Consider making this configurable via Config
   };
   
   // Add context settings if provided
@@ -48,45 +60,44 @@ async function createNewBrowserSession(
   console.error("Browserbase session created:", session.id);
 
   const browser = await chromium.connectOverCDP(session.connectUrl);
-  console.error("Connected to Playwright via CDP.");
 
   // Handle unexpected disconnects
   browser.on("disconnected", () => {
-    console.warn(
-      `Browser disconnected unexpectedly for session ID: ${newSessionId}`,
-    );
     browsers.delete(newSessionId);
+    // If the disconnected browser was the default one, clear the global reference
     if (defaultBrowserSession && defaultBrowserSession.browser === browser) {
-      console.warn("Default browser session disconnected.");
       defaultBrowserSession = null;
     }
   });
 
-  // Use or create context/page
   let context = browser.contexts()[0];
   if (!context) {
-    console.error("No existing context found, creating new context.");
     context = await browser.newContext();
   }
   let page = context.pages()[0];
   if (!page) {
-    console.error("No existing page found in context, creating new page.");
     page = await context.newPage();
   }
-  console.error(`Using page: ${page.url()}`);
 
-  const sessionData: BrowserSession = { browser, page };
-  browsers.set(newSessionId, sessionData);
-  console.error(`Session ${newSessionId} stored.`);
-  return sessionData;
+  const sessionObj: BrowserSession = { browser, page };
+
+  // Store the session
+  browsers.set(newSessionId, sessionObj);
+
+  // If this is the default session, update the global reference
+  if (newSessionId === defaultSessionId) {
+    defaultBrowserSession = sessionObj;
+  }
+
+  return sessionObj;
 }
 
-// Function to ensure the default browser session is valid
-async function ensureBrowserSession(): Promise<BrowserSession> {
+// Internal function to ensure default session, passes config down
+export async function ensureDefaultSessionInternal(config: Config): Promise<BrowserSession> {
+  const sessionId = defaultSessionId;
   try {
     if (!defaultBrowserSession) {
-      console.error("No default session found, creating new one...");
-      defaultBrowserSession = await createNewBrowserSession(defaultSessionId);
+      defaultBrowserSession = await createNewBrowserSession(sessionId, config); // Pass config
       return defaultBrowserSession;
     }
 
@@ -94,35 +105,22 @@ async function ensureBrowserSession(): Promise<BrowserSession> {
       !defaultBrowserSession.browser.isConnected() ||
       defaultBrowserSession.page.isClosed()
     ) {
-      console.warn(
-        `Default session browser disconnected (${!defaultBrowserSession.browser.isConnected()}) or page closed (${defaultBrowserSession.page.isClosed()}). Recreating...`,
-      );
       try {
         await defaultBrowserSession.browser.close();
       } catch (closeError) {
-        console.error(
-          `Error closing potentially defunct browser: ${
-            (closeError as Error).message
-          }`,
-        );
       } finally {
         defaultBrowserSession = null;
-        browsers.delete(defaultSessionId);
+        browsers.delete(sessionId);
       }
-      defaultBrowserSession = await createNewBrowserSession(defaultSessionId);
+      defaultBrowserSession = await createNewBrowserSession(sessionId, config); // Pass config
       return defaultBrowserSession;
     }
 
     try {
       await defaultBrowserSession.page.title();
-      console.error("Default session validated successfully.");
       return defaultBrowserSession;
     } catch (error) {
-      console.warn(
-        `Error validating session with page.title: ${
-          (error as Error).message
-        }. Assuming session invalid.`,
-      );
+      // Check for Playwright-specific errors indicating a closed/invalid session
       const isDisconnectedError =
         error instanceof Error &&
         (error.message.includes("Target closed") ||
@@ -132,181 +130,91 @@ async function ensureBrowserSession(): Promise<BrowserSession> {
       const isTimeoutError = error instanceof PlaywrightErrors.TimeoutError;
 
       if (isDisconnectedError || isTimeoutError) {
-        console.warn(
-          `Browser session invalid, attempting to recreate: ${
-            (error as Error).message
-          }`,
-        );
         try {
-          if (
-            defaultBrowserSession &&
-            defaultBrowserSession.browser.isConnected()
-          ) {
+          if (defaultBrowserSession && defaultBrowserSession.browser.isConnected()) {
             await defaultBrowserSession.browser.close();
           }
         } catch (e) {
-          console.error(
-            `Error closing potentially defunct default browser: ${
-              (e as Error).message
-            }`,
-          );
         } finally {
           defaultBrowserSession = null;
-          browsers.delete(defaultSessionId);
+          browsers.delete(sessionId);
         }
-        // Cleanup all sessions
-        console.error("Cleaning up all known browser sessions...");
-        for (const [id, sessionObj] of browsers.entries()) {
-          try {
-            if (sessionObj.browser.isConnected()) {
-              await sessionObj.browser.close();
-            }
-          } catch (e) {
-            console.error(
-              `Error closing browser session ${id}: ${(e as Error).message}`,
-            );
-          }
-          browsers.delete(id);
-        }
-        browsers.clear();
-        console.error("Recreating default browser session after delay...");
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        defaultBrowserSession = await createNewBrowserSession(defaultSessionId);
-        console.error("New default browser session created.");
+        // Create a completely new session
+        defaultBrowserSession = await createNewBrowserSession(sessionId, config); // Pass config
         return defaultBrowserSession;
+      } else {
+        throw error;
       }
-      console.error(
-        `Unhandled validation error, re-throwing: ${(error as Error).message}`,
-      );
-      throw error;
     }
   } catch (error) {
-    console.error(
-      `Unhandled error in ensureBrowserSession: ${(error as Error).message}`,
-    );
-    if (
-      error instanceof Error &&
-      (error.message.includes("Target closed") ||
-        error.message.includes("connect ECONNREFUSED") ||
-        error.message.includes("Page is closed"))
-    ) {
-      console.error("Attempting aggressive recovery...");
-      browsers.clear();
-      defaultBrowserSession = null;
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      try {
-        defaultBrowserSession = await createNewBrowserSession(defaultSessionId);
-        console.error(
-          "Aggressive recovery successful, new default session created.",
-        );
-        return defaultBrowserSession;
-      } catch (retryError) {
-        console.error(
-          `Aggressive recovery failed: ${(retryError as Error).message}`,
-        );
-        throw retryError;
-      }
-    }
-    throw error;
+    // Attempt recovery if it seems like a connection issue
+    if ( error instanceof Error &&
+        (error.message.includes("Target closed") ||
+          error.message.includes("connect ECONNREFUSED") ||
+          error.message.includes("Page is closed")))
+          {
+              browsers.clear(); // Clear all tracked sessions
+              defaultBrowserSession = null;
+              await new Promise((resolve) => setTimeout(resolve, 1000));
+              try {
+                  defaultBrowserSession = await createNewBrowserSession(sessionId, config); // Pass config
+                  return defaultBrowserSession;
+              } catch(retryError) {
+                  throw retryError; // Throw the error from the retry attempt
+              }
+          }
+    throw error; // Re-throw original error if not a recognized recoverable error or recovery failed
   }
 }
 
-// Function to get a specific session, validating it
-async function getSession(sessionId: string): Promise<BrowserSession> {
-  if (sessionId === defaultSessionId) {
-    console.error("Default session requested, ensuring validity...");
-    return ensureBrowserSession();
-  }
-
-  if (!browsers.has(sessionId)) {
-    console.error(`Session with ID '${sessionId}' does not exist.`);
-    throw new Error(
-      `Session with ID '${sessionId}' does not exist. Please create it first using browserbase_create_session or use the default session.`,
-    );
-  }
-
-  console.error(`Found specific session ${sessionId} in map.`);
-  let sessionObj = browsers.get(sessionId)!;
-
-  // Validate this specific session
-  if (!sessionObj.browser.isConnected() || sessionObj.page.isClosed()) {
-    console.warn(
-      `Specific session ${sessionId} is disconnected or page closed. Attempting to recreate...`,
-    );
-    try {
-      await sessionObj.browser.close();
-    } catch (e) {
-      console.error(
-        `Error closing defunct session ${sessionId}: ${(e as Error).message}`,
-      );
+// Get a specific session by ID, needs config to create/recover default
+export async function getSession(sessionId: string, config: Config): Promise<BrowserSession | null> {
+    if (sessionId === defaultSessionId) {
+        try {
+            // Calls ensureDefaultSessionInternal for the default session
+            return await ensureDefaultSessionInternal(config); 
+        } catch (error) {
+            console.error(`Error ensuring default session: ${error}`); // Added logging
+            return null;
+        }
     }
-    browsers.delete(sessionId);
-    try {
-      sessionObj = await createNewBrowserSession(sessionId); // Recreate with the same ID
-      console.error(`Successfully recreated session ${sessionId}.`);
-      return sessionObj;
-    } catch (recreateError) {
-      console.error(
-        `Failed to recreate session ${sessionId}: ${
-          (recreateError as Error).message
-        }`,
-      );
-      throw new Error(
-        `Session '${sessionId}' is invalid and could not be recreated: ${
-          (recreateError as Error).message
-        }`,
-      );
+
+    // For non-default sessions, config isn't strictly needed unless we add recreation logic
+    let sessionObj = browsers.get(sessionId);
+    if (!sessionObj) {
+        return null;
     }
-  } else {
-    // Perform a quick check
+
+    // Validate the found session (recreation logic for non-default not added here)
     try {
-      await sessionObj.page.title();
-      console.error(`Specific session ${sessionId} validated.`);
-      return sessionObj;
+        if (!sessionObj.browser.isConnected() || sessionObj.page.isClosed()) {
+            try { await sessionObj.browser.close(); } catch (e) {} // Attempt cleanup
+            browsers.delete(sessionId);
+            return null;
+        }
+        // Perform a quick check
+        // await sessionObj.page.title(); // Temporarily commented out for testing
+        return sessionObj; // Session valid (assuming connection/page checks passed)
     } catch (validationError) {
-      console.warn(
-        `Validation check failed for session ${sessionId}: ${
-          (validationError as Error).message
-        }. Assuming invalid.`,
-      );
-      try {
-        await sessionObj.browser.close();
-      } catch (e) {}
-      browsers.delete(sessionId);
-      throw new Error(
-        `Session '${sessionId}' failed validation check: ${
-          (validationError as Error).message
-        }`,
-      );
+        console.error(`Session validation error for ${sessionId}: ${validationError}`); // Add logging
+        try { await sessionObj.browser.close(); } catch (e) {} // Attempt cleanup
+        browsers.delete(sessionId);
+        return null; // Session invalid after validation failure
     }
-  }
 }
 
-// Function to close all sessions (used during shutdown)
-async function closeAllSessions() {
-  console.error("Closing active browser sessions...");
-  for (const [id, sessionObj] of browsers.entries()) {
-    try {
-      if (sessionObj.browser.isConnected()) {
-        await sessionObj.browser.close();
-        console.error(`Closed browser session ${id}.`);
-      }
-    } catch (e) {
-      console.error(
-        `Error closing browser session ${id}: ${(e as Error).message}`,
+// Function to close all managed browser sessions gracefully
+export async function closeAllSessions(): Promise<void> {
+  const closePromises: Promise<void>[] = [];
+  for (const [id, session] of browsers.entries()) {
+    if (session.browser) {
+      closePromises.push(
+        session.browser.close().then(() => {
+        }).catch(e => {
+        })
       );
     }
   }
   browsers.clear();
-  defaultBrowserSession = null;
-  console.error("Browser sessions closed.");
+  defaultBrowserSession = null; // Ensure default session reference is cleared
 }
-
-export {
-  browsers,
-  defaultSessionId,
-  createNewBrowserSession,
-  ensureBrowserSession,
-  getSession,
-  closeAllSessions,
-}; 

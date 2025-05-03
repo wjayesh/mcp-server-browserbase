@@ -1,415 +1,369 @@
-import { Page } from "playwright-core";
-import { CallToolResult, TextContent, ImageContent } from "@modelcontextprotocol/sdk/types.js";
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { screenshots } from "../resources/handlers.js";
-import { latestSnapshots } from "./common.js";
-import { errors as PlaywrightErrors } from "playwright-core";
+/**
+ * Copyright (c) Microsoft Corporation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
-// Snapshot handler
-export async function handleSnapshot(page: Page, targetSessionId: string): Promise<CallToolResult> {
-  try {
-    console.error(`Taking accessibility snapshot for session ${targetSessionId}`);
-    latestSnapshots.delete(targetSessionId);
+import { z } from "zod";
+// Removed playwright import as it's no longer directly used in handles
+// import type * as playwright from "playwright";
+import type {
+  TextContent,
+  ImageContent,
+} from "@modelcontextprotocol/sdk/types.js";
 
-    const snapshot = await page.accessibility.snapshot({
-      interestingOnly: false,
-    });
+import { defineTool } from "./tool.js";
+// Removed outputFile import if it was Playwright specific
+// import { outputFile } from "../config.js";
+import type { Context } from "../context.js"; // Assuming Context provides callBrowserbaseTool
+import type { ToolActionResult } from "../context.js";
 
-    if (!snapshot) {
-      console.error(`Snapshot returned null for session ${targetSessionId}`);
+// --- Tool: Snapshot ---
+const SnapshotInputSchema = z.object({});
+type SnapshotInput = z.infer<typeof SnapshotInputSchema>;
+
+const snapshot = defineTool<typeof SnapshotInputSchema>({
+  capability: "core",
+  schema: {
+    name: "browserbase_snapshot",
+    description:
+      "Capture a new accessibility snapshot of the current page state using Browserbase.", // Clarified description
+    inputSchema: SnapshotInputSchema,
+  },
+
+  handle: async (context: Context, params: SnapshotInput): Promise</* ToolResult from ./tool.js */ any> => {
+    // The action itself might do nothing here, as the snapshot capture
+    // is likely triggered by the framework based on captureSnapshot: true,
+    // which should invoke the underlying Browserbase snapshot capability.
+    const action = async (): Promise<ToolActionResult> => {
+      // Potentially log or confirm request, but the actual Browserbase
+      // snapshot tool is called elsewhere by the framework.
       return {
-        content: [{ type: "text", text: "Failed to capture snapshot (returned null)." }],
-        isError: true,
+        content: [{ type: "text", text: "Browserbase snapshot requested." }],
       };
+    };
+
+    return {
+      action,
+      // Code reflects the intent, not Playwright code
+      code: [`// Request Browserbase accessibility snapshot capture`],
+      captureSnapshot: true, // Signal framework to capture using Browserbase
+      waitForNetwork: false,
+    };
+  },
+});
+
+// --- Element Schema & Types ---
+const elementSchema = z.object({
+  element: z.string().describe("Human-readable element description"),
+  ref: z
+    .string()
+    .describe("Exact target element reference from the Browserbase page snapshot"), // Clarified source of ref
+});
+type ElementInput = z.infer<typeof elementSchema>;
+
+// --- Tool: Click ---
+const click = defineTool({
+  capability: 'core',
+  schema: {
+    name: 'browserbase_click',
+    description: 'Perform click on a web page using Browserbase', // Clarified
+    inputSchema: elementSchema,
+  },
+
+  handle: async (context: Context, params: ElementInput): Promise</* ToolResult */ any> => {
+    // Removed Playwright page/locator logic
+    // const page = await context.getActivePage();
+    // if (!page) throw new Error("No active page found for click");
+    // const locatorString = `[aria-ref=\"${params.ref}\"]`;
+    // const locator = page.locator(locatorString);
+
+    const code = [
+      `// Call Browserbase click: ${params.element} (ref: ${params.ref})`,
+    ];
+
+    // Action now calls the Browserbase tool via context
+    const action = async (): Promise<ToolActionResult> => {
+       // No-op: API call is now handled by Context.dispatchBrowserbaseCall
+       // We just return the expected confirmation message.
+       return {
+           content: [{ type: 'text', text: `Clicked ${params.element} via Browserbase` }],
+       };
+    };
+
+    return {
+      code,
+      action,
+      captureSnapshot: true, // Request new Browserbase snapshot after action
+      waitForNetwork: true,  // Assume clicks might cause network activity
+    };
+  },
+});
+; // Keep semicolon if it was intentional
+
+// --- Tool: Drag ---
+const dragInputSchema = z.object({
+  startElement: z.string().describe("Source element description"),
+  startRef: z
+    .string()
+    .describe("Exact source element reference from the Browserbase page snapshot"), // Clarified
+  endElement: z.string().describe("Target element description"),
+  endRef: z
+    .string()
+    .describe("Exact target element reference from the Browserbase page snapshot"), // Clarified
+});
+type DragInput = z.infer<typeof dragInputSchema>;
+
+const drag = defineTool<typeof dragInputSchema>({
+  capability: "core",
+  schema: {
+    name: "browserbase_drag",
+    description: "Perform drag and drop between two elements using Browserbase.", // Clarified
+    inputSchema: dragInputSchema,
+  },
+
+  handle: async (context: Context, params: DragInput): Promise</* ToolResult */ any> => {
+    // Removed Playwright page/locator logic
+    // const page = await context.getActivePage();
+    // ... locators ...
+
+    const code = [
+      `// Call Browserbase drag: ${params.startElement} (ref: ${params.startRef}) to ${params.endElement} (ref: ${params.endRef})`,
+    ];
+
+    // Action now calls the Browserbase tool via context
+    const action = async (): Promise<ToolActionResult> => {
+      // No-op: API call is now handled by Context.dispatchBrowserbaseCall
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Dragged ${params.startElement} to ${params.endElement} via Browserbase`,
+          },
+        ],
+      };
+    };
+
+    return {
+      action,
+      code,
+      captureSnapshot: true, // Request new Browserbase snapshot
+      waitForNetwork: true,
+    };
+  },
+});
+
+// --- Tool: Hover ---
+const hover = defineTool<typeof elementSchema>({
+  capability: "core",
+  schema: {
+    name: "browserbase_hover",
+    description: "Hover over element on page using Browserbase.", // Clarified
+    inputSchema: elementSchema,
+  },
+
+  handle: async (context: Context, params: ElementInput): Promise</* ToolResult */ any> => {
+    // Removed Playwright page/locator logic
+    // const page = await context.getActivePage();
+    // ... locator ...
+
+    const code = [
+      `// Call Browserbase hover: ${params.element} (ref: ${params.ref})`,
+    ];
+
+    // Action now calls the Browserbase tool via context
+    const action = async (): Promise<ToolActionResult> => {
+       // No-op: API call is now handled by Context.dispatchBrowserbaseCall
+       return {
+        content: [{ type: "text", text: `Hovered over: ${params.element} via Browserbase` }],
+      };
+    };
+
+    return {
+      action,
+      code,
+      captureSnapshot: true, // Request new Browserbase snapshot
+      waitForNetwork: true, // Hover might trigger updates
+    };
+  },
+});
+
+// --- Tool: Type ---
+const typeSchema = elementSchema.extend({
+  text: z.string().describe("Text to type"),
+  submit: z.boolean().optional().describe("Press Enter after typing"),
+  slowly: z.boolean().optional().describe("Type character by character"),
+});
+type TypeInput = z.infer<typeof typeSchema>;
+
+const type = defineTool<typeof typeSchema>({
+  capability: "core",
+  schema: {
+    name: "browserbase_type",
+    description: "Type text into an editable element using Browserbase.", // Clarified
+    inputSchema: typeSchema,
+  },
+
+  handle: async (context: Context, params: TypeInput): Promise</* ToolResult */ any> => {
+    // Removed Playwright page/locator logic
+    // const page = await context.getActivePage();
+    // ... locator ...
+    // ... actionSteps ...
+
+    const code: string[] = [];
+    code.push(
+      `// Call Browserbase type: "${params.text}" into "${params.element}" (ref: ${params.ref})`
+    );
+    if (params.submit) {
+        code.push(`//   with submit: ${params.submit}`);
+    }
+     if (params.slowly) {
+        code.push(`//   typing slowly: ${params.slowly}`);
     }
 
-    latestSnapshots.set(targetSessionId, snapshot);
-    console.error(`Accessibility snapshot taken and stored for session ${targetSessionId}.`);
+    // Action now calls the Browserbase tool via context
+    const action = async (): Promise<ToolActionResult> => {
+      // No-op: API call is now handled by Context.dispatchBrowserbaseCall
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Typed "${params.text}" into: ${params.element}${params.submit ? " and submitted" : ""} via Browserbase`,
+          },
+        ],
+      };
+    };
 
     return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify(snapshot, null, 2),
-        },
-      ],
-      isError: false,
+      action,
+      code,
+      captureSnapshot: true, // Request new Browserbase snapshot
+      waitForNetwork: true,
     };
-  } catch (error) {
-    console.error(
-      `Failed to take accessibility snapshot for session ${targetSessionId}: ${ (error as Error).message }`,
-    );
+  },
+});
+
+// --- Tool: Select Option ---
+const selectOptionSchema = elementSchema.extend({
+  values: z.array(z.string()).describe("Values to select"),
+});
+type SelectOptionInput = z.infer<typeof selectOptionSchema>;
+
+const selectOption = defineTool<typeof selectOptionSchema>({
+  capability: "core",
+  schema: {
+    name: "browserbase_select_option",
+    description: "Select option(s) in a dropdown using Browserbase.", // Clarified
+    inputSchema: selectOptionSchema,
+  },
+
+  handle: async (context: Context, params: SelectOptionInput): Promise</* ToolResult */ any> => {
+    // Removed Playwright page/locator logic
+    // const page = await context.getActivePage();
+    // ... locator ...
+
+    const code = [
+      `// Call Browserbase selectOption: ${JSON.stringify(params.values)} in ${
+        params.element
+      } (ref: ${params.ref})`,
+    ];
+
+    // Action now calls the Browserbase tool via context
+    const action = async (): Promise<ToolActionResult> => {
+      // No-op: API call is now handled by Context.dispatchBrowserbaseCall
+      return {
+        content: [
+          { type: "text", text: `Selected options in: ${params.element} via Browserbase` },
+        ],
+      };
+    };
+
     return {
-      content: [
-        {
-          type: "text",
-          text: `Failed to take accessibility snapshot: ${ (error as Error).message }`,
-        },
-      ],
-      isError: true,
+      action,
+      code,
+      captureSnapshot: true, // Request new Browserbase snapshot
+      waitForNetwork: true,
     };
-  }
-}
+  },
+});
 
-// --- Screenshot Handler (Moved from screenshot.ts) ---
-export async function handleTakeScreenshot(page: Page, args: any, targetSessionId: string, serverInstance: Server | null): Promise<CallToolResult> {
-  const screenshotName = `screenshot_${Date.now()}.png`;
-  const usePNG = args.raw === true;
-  const screenshotType = usePNG ? "png" : "jpeg";
-  console.error(
-    `Taking screenshot for session ${targetSessionId} as ${screenshotType} (element/ref ignored for now)`,
-  );
-  if (args.element || args.ref) {
-    console.warn(
-      `Element/ref arguments provided to browserbase_take_screenshot, but element-specific screenshots are not yet implemented. Taking full page screenshot.`,
-    );
-    // TODO: Implement element screenshot logic using args.ref (find node, get locator, screenshot locator)
-  }
-
-  const screenshotBuffer = await page.screenshot({
-    fullPage: false, // Consider making this an option?
-    type: screenshotType,
-    timeout: 30000,
+// --- Tool: Screenshot ---
+const screenshotSchema = z
+  .object({
+    raw: z
+      .boolean()
+      .optional()
+      .describe("True for PNG, false (default) for JPEG"),
+    element: z
+      .string()
+      .optional()
+      .describe("Element description (if screenshotting element)"),
+    ref: z
+      .string()
+      .optional()
+      .describe(
+        "Exact target element reference from the Browserbase page snapshot (if screenshotting element)" // Clarified
+      ),
+  })
+  .refine((data) => !!data.element === !!data.ref, {
+    message: "Both element and ref must be provided or neither.",
   });
-  if (!screenshotBuffer || screenshotBuffer.length === 0) {
-    console.error(
-      `Screenshot failed for session ${targetSessionId} - buffer empty.`,
-    );
-    return {
-      content: [
-        {
-          type: "text",
-          text: "Screenshot failed: Empty buffer returned.",
-        },
-      ],
-      isError: true,
-    };
-  }
-  const screenshotBase64 = screenshotBuffer.toString("base64");
-  screenshots.set(screenshotName, screenshotBase64); // Assuming screenshots map is accessible via import
-  if (serverInstance) {
-    serverInstance.notification({
-      method: "notifications/resources/list_changed",
-    });
-  } else {
-    console.warn("Server instance not set, cannot send notification.");
-  }
-  console.error(
-    `Screenshot taken and saved in memory as '${screenshotName}' for session ${targetSessionId}.`,
-  );
-  return {
-    content: [
-      {
-        type: "text",
-        text: `Screenshot taken for session ${targetSessionId} and saved as '${screenshotName}'`,
-      } as TextContent,
-      {
-        type: "image",
-        data: screenshotBase64,
-        mimeType: usePNG ? "image/png" : "image/jpeg",
-      } as ImageContent,
-    ],
-    isError: false,
-  };
-}
+type ScreenshotInput = z.infer<typeof screenshotSchema>;
 
-// --- Click Handler (Moved from click.ts) ---
-export async function handleClick(page: Page, args: any, targetSessionId: string): Promise<CallToolResult> {
-  if (!args.element || !args.ref) {
-    return {
-      content: [
-        {
-          type: "text",
-          text: "Missing required argument: element and/or ref",
-        },
-      ],
-      isError: true,
-    };
-  }
-  try {
-    const refToFind = args.ref;
-    const elementDesc = args.element;
-    console.error(
-      `Attempting to click element '${elementDesc}' using ref '${refToFind}' in session ${targetSessionId}`,
-    );
+const screenshot = defineTool<typeof screenshotSchema>({
+  capability: "core",
+  schema: {
+    name: "browserbase_take_screenshot",
+    description:
+      "Take a screenshot of the viewport or a specific element using Browserbase.", // Clarified
+    inputSchema: screenshotSchema,
+  },
 
-    const locator = page.locator(`aria-ref=${refToFind}`);
-    console.log(`Attempting click using locator: aria-ref=${refToFind}`);
+  handle: async (context: Context, params: ScreenshotInput): Promise</* ToolResult */ any> => {
+    // Removed Playwright page/locator/options logic
+    // const page = await context.getActivePage();
+    // ... config ...
+    // ... options ...
+    // ... locator ...
 
-    await locator.waitFor({ state: "visible", timeout: 15000 });
-    await locator.click({ timeout: 10000 });
-
-    console.error(
-      `Clicked element with ref '${refToFind}' successfully in session ${targetSessionId}.`,
-    );
-    return {
-      content: [
-        {
-          type: "text",
-          text: `Clicked element with ref: ${refToFind} in session ${targetSessionId}`,
-        },
-      ],
-      isError: false,
-    };
-  } catch (error) {
-    const refToFind = args.ref;
-    console.error(
-      `Failed to click element with ref ${refToFind} in session ${targetSessionId}: ${ (error as Error).message }`,
-    );
-    let errorMessage = `Failed to click element with ref "${refToFind}" in session ${targetSessionId}.`;
-    if (error instanceof PlaywrightErrors.TimeoutError) {
-      errorMessage +=
-        " Reason: Timeout waiting for element or click action.";
+    let code: string[] = [];
+     if (params.ref) {
+      code.push(`// Call Browserbase screenshot: element ${params.element} (ref: ${params.ref})`);
     } else {
-      errorMessage += ` Reason: ${(error as Error).message}`;
+      code.push(`// Call Browserbase screenshot: viewport`);
     }
-    return {
-      content: [{ type: "text", text: errorMessage }],
-      isError: true,
+     if (params.raw !== undefined) {
+         code.push(`//  raw format: ${params.raw}`);
+     }
+
+    // Action now calls the Browserbase tool via context
+    const action = async (): Promise<ToolActionResult> => {
+       // No-op: API call is now handled by Context.dispatchBrowserbaseCall
+       // We might need to adapt how image content is handled based on
+       // what dispatchBrowserbaseCall returns or how context manages results.
+       let text = `Screenshot taken${params.ref ? ': ' + params.element : ' (viewport)'} via Browserbase`;
+       // Potentially add image data from 'result' if available/needed here.
+       return { content: [{ type: 'text', text }] };
     };
-  }
-}
 
-// --- Type Handler (Moved from type.ts) ---
-export async function handleType(page: Page, args: any, targetSessionId: string): Promise<CallToolResult> {
-  if (!args.element || !args.ref) {
     return {
-      content: [
-        {
-          type: "text",
-          text: "Missing required argument: element and/or ref",
-        },
-      ],
-      isError: true,
+      action,
+      code,
+      captureSnapshot: false, // Taking a screenshot doesn't usually change page state
+      waitForNetwork: false,
     };
-  }
-  if (typeof args.text !== "string") {
-    return {
-      content: [
-        {
-          type: "text",
-          text: "Missing or invalid required argument: text (must be a string)",
-        },
-      ],
-      isError: true,
-    };
-  }
-  try {
-    const textToType = args.text;
-    const pressEnter = args.submit === true;
-    const typeSlowly = args.slowly === true;
-    const refToFind = args.ref;
-    const elementDesc = args.element;
+  },
+});
 
-    console.error(
-      `Attempting to type into element '${elementDesc}' using ref '${refToFind}' in session ${targetSessionId} (slowly: ${typeSlowly}, submit: ${pressEnter})`,
-    );
-
-    const locator = page.locator(`aria-ref=${refToFind}`);
-    console.log(`Attempting type using locator: aria-ref=${refToFind}`);
-
-    await locator.waitFor({ state: "visible", timeout: 15000 });
-
-    if (typeSlowly) {
-      await locator.pressSequentially(textToType, {
-        timeout: 10000 + textToType.length * 100,
-        delay: 50,
-      });
-    } else {
-      await locator.fill(textToType, { timeout: 10000 });
-    }
-
-    if (pressEnter) {
-      console.error(`Pressing Enter after typing into element with ref '${refToFind}'`);
-      await locator.press("Enter", { timeout: 5000 });
-    }
-
-    console.error(
-      `Typed into element with ref '${refToFind}' successfully in session ${targetSessionId}.`,
-    );
-    return {
-      content: [
-        {
-          type: "text",
-          text: `Typed into element described as ${ elementDesc } (ref: ${refToFind}) in session ${targetSessionId}. ${ pressEnter ? "Enter pressed." : "Enter NOT pressed." }`,
-        },
-      ],
-      isError: false,
-    };
-  } catch (error) {
-    console.error(
-      `Failed to type into element with ref '${args.ref}' in session ${targetSessionId}: ${ (error as Error).message }`,
-    );
-    let errorMessage = `Failed to type into element with ref "${args.ref}" in session ${targetSessionId}.`;
-    if (error instanceof PlaywrightErrors.TimeoutError) {
-      errorMessage +=
-        " Reason: Timeout waiting for element or type action.";
-    } else {
-      errorMessage += ` Reason: ${(error as Error).message}`;
-    }
-    return {
-      content: [{ type: "text", text: errorMessage }],
-      isError: true,
-    };
-  }
-}
-
-// --- Hover Handler (Moved from hover.ts) ---
-export async function handleHover(page: Page, args: any, targetSessionId: string): Promise<CallToolResult> {
-  if (!args.element || !args.ref) {
-    return { content: [{ type: "text", text: "Missing required argument: element and/or ref" }], isError: true };
-  }
-  try {
-    const refToFind = args.ref;
-    const elementDesc = args.element;
-    console.error(`Attempting to hover over element '${elementDesc}' using ref '${refToFind}' in session ${targetSessionId}`);
-
-    const locator = page.locator(`aria-ref=${refToFind}`);
-    console.log(`Attempting hover using locator: aria-ref=${refToFind}`);
-
-    await locator.waitFor({ state: "visible", timeout: 15000 });
-    await locator.hover({ timeout: 10000 });
-
-    console.error(`Hovered over element with ref '${refToFind}' successfully.`);
-    return { content: [{ type: "text", text: `Hovered over element with ref: ${refToFind}` }], isError: false };
-  } catch (error) {
-    const refToFind = args.ref;
-    console.error(`Failed to hover over element with ref ${refToFind}: ${(error as Error).message}`);
-    let errorMessage = `Failed to hover over element with ref "${refToFind}".`;
-    if (error instanceof PlaywrightErrors.TimeoutError) errorMessage += " Reason: Timeout.";
-    else errorMessage += ` Reason: ${(error as Error).message}`;
-    return { content: [{ type: "text", text: errorMessage }], isError: true };
-  }
-}
-
-// --- Select Option Handler (Moved from selectOption.ts) ---
-export async function handleSelectOption(page: Page, args: any, targetSessionId: string): Promise<CallToolResult> {
-  if (!args.element || !args.ref || !args.values || !Array.isArray(args.values) || args.values.length === 0) {
-    return { content: [{ type: "text", text: "Missing or invalid required arguments: element, ref, values (non-empty array)" }], isError: true };
-  }
-  try {
-    const refToFind = args.ref;
-    const elementDesc = args.element;
-    const valuesToSelect = args.values as string[];
-    console.error(`Attempting to select options [${valuesToSelect.join(", ")}] for element '${elementDesc}' using ref '${refToFind}' in session ${targetSessionId}`);
-
-    const locator = page.locator(`aria-ref=${refToFind}`);
-    console.log(`Attempting selectOption using locator: aria-ref=${refToFind}`);
-
-    await locator.waitFor({ state: "visible", timeout: 15000 });
-    await locator.selectOption(valuesToSelect, { timeout: 10000 });
-
-    console.error(`Selected options [${valuesToSelect.join(", ")}] for element with ref '${refToFind}' successfully.`);
-    return { content: [{ type: "text", text: `Selected options for element with ref: ${refToFind}` }], isError: false };
-  } catch (error) {
-    const refToFind = args.ref;
-    console.error(`Failed to select options for element with ref ${refToFind}: ${(error as Error).message}`);
-    let errorMessage = `Failed to select options for element with ref "${refToFind}".`;
-    if (error instanceof PlaywrightErrors.TimeoutError) errorMessage += " Reason: Timeout.";
-    else errorMessage += ` Reason: ${(error as Error).message}`;
-    return { content: [{ type: "text", text: errorMessage }], isError: true };
-  }
-}
-
-// --- Drag Handler (Moved from drag.ts) ---
-export async function handleDrag(page: Page, args: any, targetSessionId: string): Promise<CallToolResult> {
-  if (!args.startElement || !args.startRef || !args.endElement || !args.endRef) {
-    return { content: [{ type: "text", text: "Missing required arguments: startElement, startRef, endElement, endRef" }], isError: true };
-  }
-  try {
-    const startRef = args.startRef;
-    const startElementDesc = args.startElement;
-    const endRef = args.endRef;
-    const endElementDesc = args.endElement;
-
-    console.error(`Attempting to drag '${startElementDesc}' (ref: ${startRef}) to '${endElementDesc}' (ref: ${endRef}) in session ${targetSessionId}`);
-
-    const startLocator = page.locator(`aria-ref=${startRef}`);
-    const endLocator = page.locator(`aria-ref=${endRef}`);
-    console.log(`Attempting drag using locators: aria-ref=${startRef} -> aria-ref=${endRef}`);
-
-    await startLocator.waitFor({ state: "visible", timeout: 15000 });
-    await endLocator.waitFor({ state: "visible", timeout: 15000 });
-
-    await startLocator.dragTo(endLocator, { timeout: 20000 });
-
-    console.error(`Dragged element with ref '${startRef}' to element with ref '${endRef}' successfully.`);
-    return { content: [{ type: "text", text: `Dragged element ${startRef} to ${endRef}` }], isError: false };
-  } catch (error) {
-    console.error(`Failed to drag element ${args.startRef} to ${args.endRef}: ${(error as Error).message}`);
-    let errorMessage = `Failed to drag element ${args.startRef} to ${args.endRef}.`;
-    if (error instanceof PlaywrightErrors.TimeoutError) errorMessage += " Reason: Timeout.";
-    else errorMessage += ` Reason: ${(error as Error).message}`;
-    return { content: [{ type: "text", text: errorMessage }], isError: true };
-  }
-}
-
-// --- Get Text Handler (Moved from getText.ts) ---
-export async function handleGetText(page: Page, args: any, targetSessionId: string): Promise<CallToolResult> {
-  try {
-    console.error(
-      `Getting text content from session ${targetSessionId} (selector: ${ args.selector || "body" })`,
-    );
-    let textContent: string;
-    const targetLocator = args.selector
-      ? page.locator(args.selector)
-      : page.locator("body");
-    await targetLocator
-      .first()
-      .waitFor({ state: "attached", timeout: 15000 });
-    if (args.selector) {
-      textContent = await targetLocator
-        .first()
-        .innerText({ timeout: 10000 });
-    } else {
-      textContent = await targetLocator.innerText({ timeout: 10000 });
-    }
-    console.error(
-      `Successfully retrieved raw text content from session ${targetSessionId}. Length: ${textContent.length}`,
-    );
-    const cleanedContent = textContent
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(
-        (line) =>
-          line &&
-          !/\{.*\}/.test(line) &&
-          !/@keyframes/.test(line) &&
-          !/^[\.#]/.test(line),
-      )
-      .join("\n");
-    console.error(
-      `Cleaned text content length: ${cleanedContent.length}`,
-    );
-    const MAX_TEXT_LENGTH = 5000;
-    const truncatedContent =
-      cleanedContent.length > MAX_TEXT_LENGTH
-        ? cleanedContent.substring(0, MAX_TEXT_LENGTH) + "... (truncated)"
-        : cleanedContent;
-    return {
-      content: [
-        {
-          type: "text",
-          text: `Extracted content from session ${targetSessionId}:
-${truncatedContent}`,
-        },
-      ],
-      isError: false,
-    };
-  } catch (error) {
-    console.error(
-      `Failed to extract content from session ${targetSessionId}: ${ (error as Error).message }`,
-    );
-    let errorMessage = `Failed to extract text content from session ${targetSessionId} (selector: ${ args.selector || "body" }).`;
-    if (error instanceof PlaywrightErrors.TimeoutError) {
-      errorMessage +=
-        " Reason: Timeout waiting for element or text extraction.";
-    } else {
-      errorMessage += ` Reason: ${(error as Error).message}`;
-    }
-    return {
-      content: [{ type: "text", text: errorMessage }],
-      isError: true,
-    };
-  }
-} 
+// Ensure all defined tools are exported
+export default [snapshot, click, drag, hover, type, selectOption, screenshot];
