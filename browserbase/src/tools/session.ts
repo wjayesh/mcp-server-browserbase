@@ -1,6 +1,6 @@
 import { z } from "zod";
 // Import ToolResult and adjust Tool type usage
-import type { Tool, ToolSchema, ToolContext, ToolResult } from "./tool.js";
+import type { Tool, ToolSchema, ToolContext, ToolResult } from "./tool.js"; // Assuming these exist
 import { createSuccessResult, createErrorResult } from "./toolUtils.js"; // Assuming these exist
 import type { Context } from "../context.js"; // For handle signature
 import type { ToolActionResult } from "../context.js"; // For action return type
@@ -89,7 +89,7 @@ async function handleCreateSession(
 
     // Update context's current session ID to the one we targeted
     context.currentSessionId = targetSessionId;
-    console.error(`Successfully ensured session and set active ID: ${targetSessionId}`);
+    // console.error(`Successfully ensured session and set active ID: ${targetSessionId}`); // CHANGED to console.log or removed. Let's remove for now.
 
     // Prepare the result
     const result: ToolActionResult = {

@@ -27,6 +27,7 @@ import { defineTool } from "./tool.js";
 // import { outputFile } from "../config.js";
 import type { Context } from "../context.js"; // Assuming Context provides callBrowserbaseTool
 import type { ToolActionResult } from "../context.js";
+import { Page } from "playwright-core"; // <-- ADDED Import Page
 
 // --- Tool: Snapshot ---
 const SnapshotInputSchema = z.object({});
@@ -42,12 +43,9 @@ const snapshot = defineTool<typeof SnapshotInputSchema>({
   },
 
   handle: async (context: Context, params: SnapshotInput): Promise</* ToolResult from ./tool.js */ any> => {
-    // The action itself might do nothing here, as the snapshot capture
-    // is likely triggered by the framework based on captureSnapshot: true,
-    // which should invoke the underlying Browserbase snapshot capability.
+    // The snapshot action is slightly different - it signals the framework.
+    // The action itself can remain minimal, as Context.run doesn't directly execute it for snapshots.
     const action = async (): Promise<ToolActionResult> => {
-      // Potentially log or confirm request, but the actual Browserbase
-      // snapshot tool is called elsewhere by the framework.
       return {
         content: [{ type: "text", text: "Browserbase snapshot requested." }],
       };
@@ -55,10 +53,13 @@ const snapshot = defineTool<typeof SnapshotInputSchema>({
 
     return {
       action,
-      // Code reflects the intent, not Playwright code
       code: [`// Request Browserbase accessibility snapshot capture`],
       captureSnapshot: true, // Signal framework to capture using Browserbase
       waitForNetwork: false,
+      // ADD resultOverride for compatibility with Context.run default case logic
+      resultOverride: {
+        content: [{ type: "text", text: "Browserbase snapshot requested." }],
+      },
     };
   },
 });
@@ -82,23 +83,25 @@ const click = defineTool({
   },
 
   handle: async (context: Context, params: ElementInput): Promise</* ToolResult */ any> => {
-    // Removed Playwright page/locator logic
-    // const page = await context.getActivePage();
-    // if (!page) throw new Error("No active page found for click");
-    // const locatorString = `[aria-ref=\"${params.ref}\"]`;
-    // const locator = page.locator(locatorString);
-
     const code = [
-      `// Call Browserbase click: ${params.element} (ref: ${params.ref})`,
+      `// Perform Playwright click: ${params.element} (ref: ${params.ref})`, // Updated comment
     ];
 
-    // Action now calls the Browserbase tool via context
+    // Action now performs the Playwright click
     const action = async (): Promise<ToolActionResult> => {
-       // No-op: API call is now handled by Context.dispatchBrowserbaseCall
-       // We just return the expected confirmation message.
-       return {
-           content: [{ type: 'text', text: `Clicked ${params.element} via Browserbase` }],
-       };
+      const page = await context.getActivePage(); // Get the active page
+      if (!page) throw new Error("No active page found for click");
+      const locatorString = `[aria-ref="${params.ref}"]`; // Construct locator string
+      const locator = page.locator(locatorString);
+      await locator.click({ timeout: 15000 }); // Perform the click with timeout
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Clicked ${params.element} (ref: ${params.ref})`, // Updated text
+          },
+        ],
+      };
     };
 
     return {
@@ -133,22 +136,22 @@ const drag = defineTool<typeof dragInputSchema>({
   },
 
   handle: async (context: Context, params: DragInput): Promise</* ToolResult */ any> => {
-    // Removed Playwright page/locator logic
-    // const page = await context.getActivePage();
-    // ... locators ...
-
     const code = [
-      `// Call Browserbase drag: ${params.startElement} (ref: ${params.startRef}) to ${params.endElement} (ref: ${params.endRef})`,
+      `// Perform Playwright drag: ${params.startElement} (ref: ${params.startRef}) to ${params.endElement} (ref: ${params.endRef})`, // Updated comment
     ];
 
-    // Action now calls the Browserbase tool via context
+    // Action now performs the Playwright drag
     const action = async (): Promise<ToolActionResult> => {
-      // No-op: API call is now handled by Context.dispatchBrowserbaseCall
+      const page = await context.getActivePage();
+      if (!page) throw new Error("No active page found for drag");
+      const startLocator = page.locator(`[aria-ref="${params.startRef}"]`);
+      const endLocator = page.locator(`[aria-ref="${params.endRef}"]`);
+      await startLocator.dragTo(endLocator, { timeout: 15000 }); // Perform drag
       return {
         content: [
           {
             type: "text",
-            text: `Dragged ${params.startElement} to ${params.endElement} via Browserbase`,
+            text: `Dragged ${params.startElement} to ${params.endElement}`, // Updated text
           },
         ],
       };
@@ -173,19 +176,20 @@ const hover = defineTool<typeof elementSchema>({
   },
 
   handle: async (context: Context, params: ElementInput): Promise</* ToolResult */ any> => {
-    // Removed Playwright page/locator logic
-    // const page = await context.getActivePage();
-    // ... locator ...
-
     const code = [
-      `// Call Browserbase hover: ${params.element} (ref: ${params.ref})`,
+      `// Perform Playwright hover: ${params.element} (ref: ${params.ref})`, // Updated comment
     ];
 
-    // Action now calls the Browserbase tool via context
+    // Action now performs the Playwright hover
     const action = async (): Promise<ToolActionResult> => {
-       // No-op: API call is now handled by Context.dispatchBrowserbaseCall
-       return {
-        content: [{ type: "text", text: `Hovered over: ${params.element} via Browserbase` }],
+      const page = await context.getActivePage();
+      if (!page) throw new Error("No active page found for hover");
+      const locator = page.locator(`[aria-ref="${params.ref}"]`);
+      await locator.hover({ timeout: 15000 }); // Perform hover
+      return {
+        content: [
+          { type: "text", text: `Hovered over: ${params.element}` }, // Updated text
+        ],
       };
     };
 
@@ -215,30 +219,54 @@ const type = defineTool<typeof typeSchema>({
   },
 
   handle: async (context: Context, params: TypeInput): Promise</* ToolResult */ any> => {
-    // Removed Playwright page/locator logic
-    // const page = await context.getActivePage();
-    // ... locator ...
-    // ... actionSteps ...
-
     const code: string[] = [];
     code.push(
-      `// Call Browserbase type: "${params.text}" into "${params.element}" (ref: ${params.ref})`
+      `// Perform Playwright type: "${params.text}" into "${params.element}" (ref: ${params.ref})` // Updated comment
     );
     if (params.submit) {
-        code.push(`//   with submit: ${params.submit}`);
+      code.push(`//   with submit: ${params.submit}`);
     }
-     if (params.slowly) {
-        code.push(`//   typing slowly: ${params.slowly}`);
+    if (params.slowly) {
+      code.push(`//   typing slowly: ${params.slowly}`);
     }
 
-    // Action now calls the Browserbase tool via context
+    // Action now performs the Playwright type
     const action = async (): Promise<ToolActionResult> => {
-      // No-op: API call is now handled by Context.dispatchBrowserbaseCall
+      const page = await context.getActivePage();
+      if (!page) throw new Error("No active page found for type");
+      const locatorString = `[aria-ref="${params.ref}"]`;
+      const locator = page.locator(locatorString);
+
+      // Wait for the element to be visible and enabled before interacting
+      try {
+        await locator.waitFor({ state: 'visible', timeout: 10000 }); // Wait up to 10s for visible
+      } catch (waitError) {
+          console.error(`[browserbase_type] Wait for locator ${locatorString} visible failed: ${waitError instanceof Error ? waitError.message : String(waitError)}`);
+          // Provide a slightly more specific error message
+          throw new Error(`Element '${params.element}' (ref: ${params.ref}) not visible within timeout.`);
+      }
+
+      // Check if editable right before typing
+      if (!await locator.isEditable({timeout: 1000})) { // Check if editable (1s timeout)
+          console.error(`[browserbase_type] Locator ${locatorString} is not editable.`);
+          throw new Error(`Element '${params.element}' (ref: ${params.ref}) was visible but not editable.`);
+      }
+
+      const typeOptions: { delay?: number; timeout?: number } = { timeout: 15000 }; // Keep original type timeout
+      if (params.slowly) {
+        typeOptions.delay = 100; // Add delay if slowly is true
+      }
+      await locator.type(params.text, typeOptions); // Pass combined options
+      if (params.submit) {
+        await locator.press("Enter", { timeout: 5000 }); // Press Enter if submit is true
+      }
       return {
         content: [
           {
             type: "text",
-            text: `Typed "${params.text}" into: ${params.element}${params.submit ? " and submitted" : ""} via Browserbase`,
+            text: `Typed "${params.text}" into: ${params.element}${
+              params.submit ? " and submitted" : ""
+            }`, // Updated text
           },
         ],
       };
@@ -268,22 +296,24 @@ const selectOption = defineTool<typeof selectOptionSchema>({
   },
 
   handle: async (context: Context, params: SelectOptionInput): Promise</* ToolResult */ any> => {
-    // Removed Playwright page/locator logic
-    // const page = await context.getActivePage();
-    // ... locator ...
-
     const code = [
-      `// Call Browserbase selectOption: ${JSON.stringify(params.values)} in ${
-        params.element
-      } (ref: ${params.ref})`,
+      `// Perform Playwright selectOption: ${JSON.stringify(
+        params.values
+      )} in ${params.element} (ref: ${params.ref})`, // Updated comment
     ];
 
-    // Action now calls the Browserbase tool via context
+    // Action now performs the Playwright selectOption
     const action = async (): Promise<ToolActionResult> => {
-      // No-op: API call is now handled by Context.dispatchBrowserbaseCall
+      const page = await context.getActivePage();
+      if (!page) throw new Error("No active page found for selectOption");
+      const locator = page.locator(`[aria-ref="${params.ref}"]`);
+      await locator.selectOption(params.values, { timeout: 15000 }); // Perform selectOption
       return {
         content: [
-          { type: "text", text: `Selected options in: ${params.element} via Browserbase` },
+          {
+            type: "text",
+            text: `Selected options in: ${params.element}`, // Updated text
+          },
         ],
       };
     };
@@ -330,30 +360,71 @@ const screenshot = defineTool<typeof screenshotSchema>({
   },
 
   handle: async (context: Context, params: ScreenshotInput): Promise</* ToolResult */ any> => {
-    // Removed Playwright page/locator/options logic
-    // const page = await context.getActivePage();
-    // ... config ...
-    // ... options ...
-    // ... locator ...
-
     let code: string[] = [];
-     if (params.ref) {
-      code.push(`// Call Browserbase screenshot: element ${params.element} (ref: ${params.ref})`);
+    if (params.ref) {
+      code.push(
+        `// Perform Playwright screenshot: element ${params.element} (ref: ${params.ref})` // Updated comment
+      );
     } else {
-      code.push(`// Call Browserbase screenshot: viewport`);
+      code.push(`// Perform Playwright screenshot: viewport`); // Updated comment
     }
-     if (params.raw !== undefined) {
-         code.push(`//  raw format: ${params.raw}`);
-     }
+    if (params.raw !== undefined) {
+      code.push(`//  format: ${params.raw ? "png" : "jpeg"}`);
+    }
 
-    // Action now calls the Browserbase tool via context
+    // Action now performs the Playwright screenshot and adds resource
     const action = async (): Promise<ToolActionResult> => {
-       // No-op: API call is now handled by Context.dispatchBrowserbaseCall
-       // We might need to adapt how image content is handled based on
-       // what dispatchBrowserbaseCall returns or how context manages results.
-       let text = `Screenshot taken${params.ref ? ': ' + params.element : ' (viewport)'} via Browserbase`;
-       // Potentially add image data from 'result' if available/needed here.
-       return { content: [{ type: 'text', text }] };
+      const page = await context.getActivePage();
+      if (!page) throw new Error("No active page found for screenshot");
+
+      const format = params.raw ? "png" : "jpeg";
+      const screenshotOptions: Parameters<Page['screenshot']>[0] = {
+          type: format,
+          timeout: 15000,
+      };
+
+      let buffer: Buffer;
+      if (params.ref) {
+        const locator = page.locator(`[aria-ref="${params.ref}"]`);
+        screenshotOptions.clip = await locator.boundingBox() ?? undefined; // Get bounding box for element screenshot
+        if (!screenshotOptions.clip) {
+            console.warn(`[Screenshot Tool] Could not get bounding box for element ref ${params.ref}. Taking viewport screenshot instead.`);
+            delete screenshotOptions.clip; // Fallback to viewport if no bounding box
+            buffer = await page.screenshot(screenshotOptions);
+        } else {
+             buffer = await page.screenshot(screenshotOptions);
+        }
+
+      } else {
+        buffer = await page.screenshot(screenshotOptions);
+      }
+
+
+      const base64 = buffer.toString("base64");
+      const name = `screenshot-${Date.now()}.${format}`;
+      context.addScreenshot(name, format, base64); // Use context to add resource
+
+      const imageContent: ImageContent = {
+        type: "image",
+        format: format,
+        mimeType: `image/${format}`, // Add mimeType
+        data: "", // Add empty data field to satisfy type, client uses URI
+        detail: "low",
+        uri: `mcp://screenshots/${name}`, // Construct URI directly
+      };
+
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Screenshot taken${
+              params.ref ? ": " + params.element : " (viewport)"
+            } and saved as resource '${name}'.`,
+          },
+          imageContent, // Include image content reference
+        ],
+      };
     };
 
     return {
