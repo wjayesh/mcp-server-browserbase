@@ -159,6 +159,9 @@ export class Context {
     let initialPage: BrowserSession["page"] | null = null;
     let initialBrowser: BrowserSession["browser"] | null = null;
 
+    console.error(`[Context.run] Executing tool: ${toolName}`); // Log tool name TO STDERR
+    console.error(`[Context.run] Received args:`, JSON.stringify(args, null, 2)); // Log raw args TO STDERR
+
     // Validate args first
     let validatedArgs: any;
     try {
@@ -179,158 +182,334 @@ export class Context {
       );
     }
 
-    // --- Session Handling --- 
+    // --- Session Handling ---
     // Check if the validated arguments contain a sessionId
     if (validatedArgs && typeof validatedArgs.sessionId === 'string' && validatedArgs.sessionId) {
       // If a specific sessionId is provided, switch the context's current session ID
+      console.error(`[Context.run] Found sessionId in args: ${validatedArgs.sessionId}. Switching active session.`); // Log explicit session switch TO STDERR
       this.currentSessionId = validatedArgs.sessionId;
-      console.error(`Context switched to session ID: ${this.currentSessionId}`); // Add logging
     } else if (toolName === 'browserbase_session_create') {
-        // Special case: Don't try to get active page/browser before creating one.
-        // Session ID will be set within the handleCreateSession function.
-        console.error('Skipping active page check for session creation.');
+        // Special case: Skip retrieval before creation
+        console.error(`[Context.run] Tool is ${toolName}. Skipping session retrieval.`);
     } else {
-        // If no specific sessionId is provided, ensure we are using the default context
-        // (or stick to the last used one if that's the desired behavior - current implementation sticks)
-        // If the current ID is NOT default, maybe force it back? Or just use current?
-        // For now, we implicitly use whatever this.currentSessionId currently is.
-        // We might want to explicitly set to default if no sessionId is passed:
-        // this.currentSessionId = defaultSessionId; 
-        console.error(`Using existing context session ID: ${this.currentSessionId}`);
+        // Use the implicitly active session ID (this.currentSessionId)
+        console.error(`[Context.run] PRE-GET: About to use active session ID: ${this.currentSessionId}`); 
+        console.error(`[Context.run] Using active session ID: ${this.currentSessionId}`); // <--- Uses the (potentially updated) ID
     }
 
     // Get page/browser *after* potentially switching session ID
-    // Skip this check only if we are creating a session.
-    if (toolName !== "browserbase_session_create") { 
-      try { // Wrap in try-catch to handle potential errors from getSession
-        initialPage = await this.getActivePage();
-        initialBrowser = await this.getActiveBrowser();
-        
-        if (!initialPage || !initialBrowser) {
-            // Error if session (now potentially the one from args) is invalid/not found
-            return this.createErrorResult(
-              `Failed to get valid page/browser for session ${this.currentSessionId} required by tool ${toolName}`,
-              toolName
-            );
+    if (toolName !== "browserbase_session_create") {
+      try {
+        console.error(`[Context.run] GETSESSION CALL: Calling getSession with ID: ${this.currentSessionId}`);
+        console.error(`[Context.run] Attempting to get session: ${this.currentSessionId}`); // <--- Uses the correct ID here
+        const session = await getSession(this.currentSessionId, this.config); // <--- Passes the correct ID to sessionManager
+        if (!session || session.page.isClosed() || !session.browser.isConnected()) {
+           console.error(`[Context.run] Session ${this.currentSessionId} is invalid or closed.`);
+           throw new Error(`Session ${this.currentSessionId} is invalid or closed.`);
         }
+        initialPage = session.page;
+        initialBrowser = session.browser;
+        console.error(`[Context.run] Successfully retrieved session with ID: "${this.currentSessionId}", browser connected: ${initialBrowser.isConnected()}, page URL: ${initialPage.url()}`);
       } catch (sessionError) {
-          // Catch errors during getActivePage/Browser (e.g., from getSession)
+          // Catch errors during getSession or validity checks
+          console.error(`[Context.run] Error retrieving/validating session ${this.currentSessionId}: ${sessionError instanceof Error ? sessionError.message : String(sessionError)}`); // Log session error TO STDERR
           return this.createErrorResult(
-              `Error retrieving session ${this.currentSessionId}: ${sessionError instanceof Error ? sessionError.message : String(sessionError)}`,
+              `Error retrieving or validating session ${this.currentSessionId}: ${sessionError instanceof Error ? sessionError.message : String(sessionError)}`,
               toolName
           );
       }
     }
-    // --- Remove old check position ---
-    /* 
-    if (
-      toolName !== "browserbase_create_session" &&
-      toolName !== "browser_session_create" // Remove old name check here too if desired
-    ) {
-      // Check both names
-      initialPage = await this.getActivePage();
-      initialBrowser = await this.getActiveBrowser();
-      if (!initialPage || !initialBrowser) {
-        return this.createErrorResult(
-          `Failed to get valid page/browser for session ${this.currentSessionId} required by tool ${toolName}`,
-          toolName
-        );
-      }
-    }
-    */
 
-    // --- Execute Tool Logic and Dispatch Browserbase Call ---
-    // TODO: Decide if tool.handle() is still needed for pre-checks or if all logic is here.
-    // For now, assume handle might do validation or setup but not the main action.
+    // --- Execute Tool Logic ---
     let finalResult: CallToolResult;
 
-    if ("handle" in tool && typeof tool.handle === "function") {
-       try {
-         // We might still call handle for setup, but ignore its action result
-         await tool.handle(this as any, validatedArgs);
-         // console.log(`Tool handle completed for ${toolName}`);
-       } catch (handleError) {
-          // Handle errors from the tool's internal handle function if needed
-          return this.createErrorResult(
-           `Tool handle function failed for ${toolName}: ${handleError instanceof Error ? handleError.message : String(handleError)}`,
-           toolName
+    // Prioritize executing Playwright action directly if it's a browser interaction tool
+    // Assumes the tool schemas provide necessary parameters like 'selector', 'url', 'text', 'values' etc.
+
+    try {
+        // --- Direct Playwright Action Execution ---
+        switch (toolName) {
+            case 'browserbase_navigate': // Assuming a tool name, adjust if needed
+                if (!initialPage) throw new Error("Page not available for navigation.");
+                if (typeof validatedArgs.url !== 'string') throw new Error("Missing 'url' argument for navigate.");
+                await initialPage.goto(validatedArgs.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+                finalResult = { content: [{ type: 'text', text: `Navigated to ${validatedArgs.url}` }], isError: false };
+                break;
+
+            case 'browserbase_click':
+                 if (!initialPage) throw new Error("Page not available for click.");
+                 if (typeof validatedArgs.ref !== 'string') throw new Error("Missing 'ref' argument for click.");
+                 if (typeof validatedArgs.element !== 'string') throw new Error("Missing 'element' argument for click.");
+
+                 try {
+                     // 1. Delegate to the tool's handle function
+                     const clickToolResult = await tool.handle(this as any, validatedArgs);
+
+                     let actionResultText = `Clicked element: ${validatedArgs.element} (ref: ${validatedArgs.ref})`; // Default success text
+
+                     // 2. Check if an action function was returned
+                     if (clickToolResult && typeof clickToolResult.action === 'function') {
+                         // 3. Await the action's execution
+                         const actionResult = await clickToolResult.action();
+
+                         // 4. Optionally use text from the action's result
+                         if (actionResult?.content?.length) {
+                             actionResultText = actionResult.content.map(c => c.type === 'text' ? c.text : `[${c.type}]`).join(' ');
+                         }
+                         // If actionResult is void/undefined or has no content, the default success text is used.
+                         
+                         // 5. Construct the final success result (only if action was executed)
+                         finalResult = {
+                             content: [{ type: 'text', text: actionResultText }],
+                             isError: false
+                         };
+                     } else {
+                         // If handle didn't return an action, treat it as an error for interactive tools.
+                         finalResult = this.createErrorResult(
+                             `Tool ${toolName} handle did not return an executable action.`,
+                             toolName
+                         );
+                     }
+
+                 } catch (clickError) {
+                     // 6. Catch errors specifically from handle() or action()
+                     finalResult = this.createErrorResult(
+                         `Click action failed for ${validatedArgs.element} (ref: ${validatedArgs.ref}): ${clickError instanceof Error ? clickError.message : String(clickError)}`,
+                         toolName
+                     );
+                 }
+                 break; // End of browserbase_click case
+
+            case 'browserbase_type': // Renamed from 'fill' for clarity, or handle both
+                 if (!initialPage) throw new Error("Page not available for type.");
+                 // Align with snapshot.ts definition: expect 'ref', 'element', 'text', etc.
+                 if (typeof validatedArgs.ref !== 'string') throw new Error("Missing 'ref' argument for type.");
+                 if (typeof validatedArgs.element !== 'string') throw new Error("Missing 'element' argument for type.");
+                 if (typeof validatedArgs.text !== 'string') throw new Error("Missing 'text' argument for type.");
+
+                 // Delegate to the tool's handle function
+                 const typeToolResult = await tool.handle(this as any, validatedArgs);
+
+                 // Construct result message based on delegation
+                 let typeContent = `Type action delegated for element: ${validatedArgs.element} (ref: ${validatedArgs.ref})`;
+                 if (typeToolResult && typeToolResult.action) {
+                     const actionResult = await typeToolResult.action();
+                     if (actionResult?.content?.length) {
+                         const actionText = actionResult.content.map(c => c.type === 'text' ? c.text : `[${c.type}]`).join(' ');
+                         typeContent = actionText;
+                     }
+                     // Construct success result only if action was executed
+                     finalResult = { content: [{ type: 'text', text: typeContent }], isError: false };
+                 } else {
+                     // If handle didn't return an action, treat it as an error.
+                     finalResult = this.createErrorResult(
+                         `Tool ${toolName} handle did not return an executable action.`,
+                         toolName
+                     );
+                 }
+                 break;
+
+             case 'browserbase_select_option':
+                 if (!initialPage) throw new Error("Page not available for select_option.");
+                 // Align with snapshot.ts definition: expect 'ref', 'element', 'values'
+                 if (typeof validatedArgs.ref !== 'string') throw new Error("Missing 'ref' argument for select_option.");
+                 if (typeof validatedArgs.element !== 'string') throw new Error("Missing 'element' argument for select_option.");
+                 if (!Array.isArray(validatedArgs.values) || validatedArgs.values.length === 0) throw new Error("Missing or empty 'values' array for select_option.");
+
+                 // Delegate to the tool's handle function
+                 const selectToolResult = await tool.handle(this as any, validatedArgs);
+
+                 // Construct result message based on delegation
+                 let selectContent = `Select option action delegated for element: ${validatedArgs.element} (ref: ${validatedArgs.ref})`;
+                  if (selectToolResult && selectToolResult.action) {
+                     const actionResult = await selectToolResult.action();
+                     if (actionResult?.content?.length) {
+                         const actionText = actionResult.content.map(c => c.type === 'text' ? c.text : `[${c.type}]`).join(' ');
+                         selectContent = actionText;
+                     }
+                      // Construct success result only if action was executed
+                     finalResult = { content: [{ type: 'text', text: selectContent }], isError: false };
+                 } else {
+                    // If handle didn't return an action, treat it as an error.
+                    finalResult = this.createErrorResult(
+                        `Tool ${toolName} handle did not return an executable action.`,
+                        toolName
+                    );
+                 }
+                 break;
+
+             case 'browserbase_hover':
+                 if (!initialPage) throw new Error("Page not available for hover.");
+                 // Align with snapshot.ts definition: expect 'ref', 'element'
+                 if (typeof validatedArgs.ref !== 'string') throw new Error("Missing 'ref' argument for hover.");
+                 if (typeof validatedArgs.element !== 'string') throw new Error("Missing 'element' argument for hover.");
+
+                 // Delegate to the tool's handle function
+                 const hoverToolResult = await tool.handle(this as any, validatedArgs);
+
+                 // Construct result message based on delegation
+                 let hoverContent = `Hover action delegated for element: ${validatedArgs.element} (ref: ${validatedArgs.ref})`;
+                 if (hoverToolResult && hoverToolResult.action) {
+                     const actionResult = await hoverToolResult.action();
+                     if (actionResult?.content?.length) {
+                         const actionText = actionResult.content.map(c => c.type === 'text' ? c.text : `[${c.type}]`).join(' ');
+                         hoverContent = actionText;
+                     }
+                      // Construct success result only if action was executed
+                     finalResult = { content: [{ type: 'text', text: hoverContent }], isError: false };
+                 } else {
+                    // If handle didn't return an action, treat it as an error.
+                     finalResult = this.createErrorResult(
+                         `Tool ${toolName} handle did not return an executable action.`,
+                         toolName
+                     );
+                 }
+                 break;
+
+            // Placeholder - Drag needs more complex handling with bounding boxes or source/target elements
+            // case 'browserbase_drag':
+            //     if (!initialPage) throw new Error("Page not available for drag.");
+            //     // Requires source and target selectors
+            //     // await initialPage.dragAndDrop(validatedArgs.startSelector, validatedArgs.endSelector);
+            //     console.warn("[Context] Placeholder: Playwright drag action needs implementation.");
+            //     finalResult = { content: [{ type: 'text', text: `Drag action placeholder for ${validatedArgs.startSelector} to ${validatedArgs.endSelector}` }], isError: false };
+            //     break;
+
+             case 'browserbase_take_screenshot':
+                 if (!initialPage) throw new Error("Page not available for screenshot.");
+                 // Align with snapshot.ts definition: takes optional 'ref', 'element', 'raw'
+                 // Delegate to the tool's handle function
+                 const screenshotToolResult = await tool.handle(this as any, validatedArgs);
+
+                 // Construct result message based on delegation
+                 let screenshotContent = `Take screenshot action delegated`;
+                 if (validatedArgs.ref && validatedArgs.element) {
+                    screenshotContent += ` for element: ${validatedArgs.element} (ref: ${validatedArgs.ref})`;
+                 } else {
+                    screenshotContent += ` for viewport`;
+                 }
+                 if (screenshotToolResult && screenshotToolResult.action) {
+                     const actionResult = await screenshotToolResult.action();
+                     // Screenshot action in snapshot.ts handle seems to return specific text
+                     if (actionResult?.content?.length) {
+                         const actionText = actionResult.content.map(c => c.type === 'text' ? c.text : `[${c.type}]`).join(' ');
+                         screenshotContent = actionText;
+                     }
+                     // NOTE: The original direct implementation saved the screenshot as a resource.
+                     // The delegated handle doesn't do that directly. The framework needs to handle
+                     // potential image data if the Browserbase call returns it.
+
+                     // Construct success result only if action was executed
+                     finalResult = { content: [{ type: 'text', text: screenshotContent }], isError: false };
+
+                 } else {
+                    // If handle didn't return an action, treat it as an error.
+                     finalResult = this.createErrorResult(
+                         `Tool ${toolName} handle did not return an executable action.`,
+                         toolName
+                     );
+                 }
+                 break;
+
+             case 'browserbase_get_text': // Example for getting text
+                 if (!initialPage) throw new Error("Page not available for get_text.");
+                 let textContent;
+                 if (validatedArgs.selector && typeof validatedArgs.selector === 'string') {
+                     await initialPage.waitForSelector(validatedArgs.selector, { timeout: 10000 });
+                     textContent = await initialPage.textContent(validatedArgs.selector);
+                 } else {
+                     textContent = await initialPage.evaluate(() => document.body.innerText);
+                 }
+                 finalResult = { content: [{ type: 'text', text: `Retrieved text:\n${textContent || ''}` }], isError: false };
+                 break;
+
+            // --- Fallback to existing tool.run for non-browser actions or session creation ---
+            default:
+                if ("run" in tool && typeof tool.run === "function") {
+                  // Tool uses the existing 'run' structure (e.g., session_create, snapshot processing?)
+                  finalResult = await tool.run(validatedArgs);
+
+                  // If session_create returned a new session ID, update context
+                  // This assumes session_create tool returns something like { newSessionId: '...' } in content
+                  const newSessionIdText = finalResult.content?.find(c => c.type === 'text')?.text?.match(/Session created: (\S+)/);
+                  if (newSessionIdText && newSessionIdText[1]) {
+                      this.currentSessionId = newSessionIdText[1];
+                  }
+
+
+                } else if ("handle" in tool && typeof tool.handle === "function") {
+                    // Handle tools that might *only* have a handle function (like session_create)
+                    const handleResult = await tool.handle(this as any, validatedArgs);
+
+                    // --- BEGIN ADDED LOGGING ---
+                    console.error(`[Context.run] Default Case - tool.handle result for ${toolName}:`, JSON.stringify(handleResult, null, 2));
+                    // --- END ADDED LOGGING ---
+
+                    // Check if handle returned a resultOverride (expected structure for session_create)
+                    if (handleResult && typeof handleResult === 'object' && 'resultOverride' in handleResult) {
+                        // --- BEGIN ADDED LOGGING ---
+                        console.error(`[Context.run] Default Case - Found 'resultOverride' property for ${toolName}.`);
+                        // --- END ADDED LOGGING ---
+                        const override = handleResult.resultOverride;
+                        // Construct finalResult from the override
+                        finalResult = {
+                            content: override?.content ?? [], // Use content from override, default to empty array
+                            isError: false, // Assume handle throws error on failure, or override indicates error somehow (TBD if needed)
+                        };
+                        // Note: session ID update happens *inside* handleCreateSession now.
+                        // No need to parse text here.
+                    } else {
+                        // --- BEGIN ADDED LOGGING ---
+                        console.error(`[Context.run] Default Case - Did NOT find 'resultOverride' property for ${toolName}.`);
+                        // --- END ADDED LOGGING ---
+                        // Fallback if handle doesn't return the expected structure
+                        console.warn(`[Context.run] Tool ${toolName} used 'handle' but did not return expected resultOverride.`);
+                        finalResult = {
+                            content: [{ type: 'text', text: `Executed handle for ${toolName}, but result format unexpected.` }],
+                            isError: false, // Or potentially true, depending on desired behavior
+                        };
+                    }
+                }
+
+                else {
+                    finalResult = this.createErrorResult(
+                      `Tool ${toolName} could not be handled directly via Playwright and has no 'run' function.`,
+                      toolName
+                    );
+                }
+                break; // End of default case
+        } // End of switch (toolName)
+
+    } catch (error) {
+         // Catch errors from the Playwright actions or tool.run/handle fallback
+         finalResult = this.createErrorResult(
+             `Tool execution failed for ${toolName}: ${error instanceof Error ? error.message : String(error)}`,
+             toolName
          );
-       }
-    } // We might need an 'else' block if some tools *only* use the old 'run' structure
+     }
 
-    // Regardless of handle/run, dispatch the actual Browserbase call
-    // (unless handle already returned an error or specific override)
-    // Exception: Tools like 'snapshot' might rely on the framework loop (captureSnapshot: true)
-    // We need to decide if dispatchBrowserbaseCall should handle *all* tools or only interactive ones.
-
-    // Example: Only dispatch for tools expected to make direct API calls
-    const toolsRequiringDispatch = [
-        'browserbase_click',
-        'browserbase_type',
-        'browserbase_drag',
-        'browserbase_hover',
-        'browserbase_select_option',
-        'browserbase_take_screenshot',
-        // Add others like navigate, etc.
-    ];
-
-    if (toolsRequiringDispatch.includes(toolName)) {
-      finalResult = await this.dispatchBrowserbaseCall(toolName, validatedArgs);
-    } else if (toolName === 'browserbase_snapshot') {
-       // Snapshot might not need a direct dispatch here if captureSnapshot=true handles it.
-       // Return a simple confirmation.
-       finalResult = { content: [{ type: 'text', text: 'Browserbase snapshot requested.' }], isError: false };
-    }
-    else if ("run" in tool && typeof tool.run === "function") {
-      // Tool uses the existing 'run' structure
-      try {
-        const toolContext: ToolContext = {
-          page: initialPage!,
-          browser: initialBrowser!,
-          server: this.server,
-          sessionId: this.currentSessionId,
-          config: this.config,
-          context: this,
-        };
-        finalResult = await tool.run(toolContext, validatedArgs);
-      } catch (error) {
-        finalResult = this.createErrorResult(
-          `Tool run failed: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-          toolName
-        );
-      }
-    } else {
-      finalResult = this.createErrorResult(
-        `Tool ${toolName} has neither a valid \'run\' nor \'handle\' function.`,
-        toolName
-      );
-    }
 
     // --- Append session state info (unless snapshot) ---
+    // (Keep existing state appending logic - it should work fine with Playwright page object)
     if (
       !finalResult.isError &&
-      toolName !== "browserbase_snapshot" &&
-      toolName !== "browser_snapshot"
+      toolName !== "browserbase_snapshot" // Assuming snapshot is handled differently
     ) {
-      const currentPage = await this.getActivePage();
+      // Use the currently active page for state, which might have changed if session_create was called
+      const currentPage = await this.getActivePage(); // Re-fetch in case session changed
       let currentStateText = `\n\nCurrent Session: ${this.currentSessionId}`;
       if (currentPage && !currentPage.isClosed()) {
         try {
-          // Restore the complete template literal content
           currentStateText += `\nURL: ${currentPage.url()}\nTitle: ${await currentPage.title()}`;
         } catch (stateError) {
-          // Ensure error is handled correctly
           currentStateText += `\nURL/Title: [Error reading state: ${
-            stateError instanceof Error
-              ? stateError.message
-              : String(stateError)
+            stateError instanceof Error ? stateError.message : String(stateError)
           }]`;
         }
       } else {
-        currentStateText += `\nURL/Title: [Page unavailable]`;
+        currentStateText += `\nURL/Title: [Page unavailable for session ${this.currentSessionId}]`;
       }
+      // Append state to existing text content or add new
       let textContent = finalResult.content?.find((c) => c.type === "text") as
         | TextContent
         | undefined;
@@ -346,89 +525,14 @@ export class Context {
     return finalResult;
   }
 
-  /**
-   * Dispatches the appropriate Browserbase API call based on the tool name and arguments.
-   * This method centralizes the interaction with the Browserbase service.
-   * NOTE: This requires access to a Browserbase client instance.
-   * This method serves as a central dispatcher for Browserbase API calls.
-   * 
-   * Architecture comparison:
-   * 
-   * 1. Playwright MCP Model:
-   *    - Context manages Playwright Page objects (often wrapped in Tab objects)
-   *    - tool.handle receives context with access to Playwright Page/Locator
-   *    - Action functions directly execute Playwright commands (locator.click(), etc.)
-   *    - context.run simply executes the action function containing browser logic
-   * 
-   * 2. Browserbase MCP Model:
-   *    - Tools in src/tools/snapshot.ts prepare arguments but don't make API calls
-   *    - The tool.handle function returns an action that context.run doesn't execute
-   *    - Context takes responsibility for the actual Browserbase API calls
-   *    - context.run identifies tool requests (e.g., 'browserbase_click')
-   *    - dispatchBrowserbaseCall maps tool names to specific Browserbase API calls
-   * 
-   * In summary: Playwright puts browser interaction in the tool's action function,
-   * while our Browserbase model centralizes API calls in the Context.
-   */
-  private async dispatchBrowserbaseCall(toolName: string, params: any): Promise<CallToolResult> {
-    console.log(`[Context] Dispatching Browserbase call for: ${toolName} with params:`, params);
-
-    // TODO: Obtain or ensure Browserbase client instance is available here.
-    // e.g., const browserbaseClient = this.getBrowserbaseClient();
-    // Ensure this.currentSessionId is correctly set before this point.
-
-    try {
-      // Map toolName to Browserbase API calls
-      switch (toolName) {
-        case 'browserbase_click':
-          // Replace with: await browserbaseClient.click(this.currentSessionId, params.ref, ...);
-          console.warn(`[Context] Placeholder: Simulating Browserbase click for ref ${params.ref}`);
-          return { content: [{ type: 'text', text: `Clicked ${params.element} via Browserbase` }], isError: false };
-
-        case 'browserbase_type':
-          // Replace with: await browserbaseClient.type(this.currentSessionId, params.ref, params.text, ...);
-          console.warn(`[Context] Placeholder: Simulating Browserbase type for ref ${params.ref}, text "${params.text}"`);
-          return { content: [{ type: 'text', text: `Typed "${params.text}" into ${params.element} via Browserbase` }], isError: false };
-
-        case 'browserbase_drag':
-          // Replace with: await browserbaseClient.drag(this.currentSessionId, params.startRef, params.endRef, ...);
-          console.warn(`[Context] Placeholder: Simulating Browserbase drag from ${params.startRef} to ${params.endRef}`);
-          return { content: [{ type: 'text', text: `Dragged ${params.startElement} to ${params.endElement} via Browserbase` }], isError: false };
-
-        case 'browserbase_hover':
-          // Replace with: await browserbaseClient.hover(this.currentSessionId, params.ref, ...);
-          console.warn(`[Context] Placeholder: Simulating Browserbase hover for ref ${params.ref}`);
-          return { content: [{ type: 'text', text: `Hovered over ${params.element} via Browserbase` }], isError: false };
-
-        case 'browserbase_select_option':
-          // Replace with: await browserbaseClient.selectOption(this.currentSessionId, params.ref, params.values, ...);
-          console.warn(`[Context] Placeholder: Simulating Browserbase selectOption for ref ${params.ref}, values ${JSON.stringify(params.values)}`);
-          return { content: [{ type: 'text', text: `Selected options in ${params.element} via Browserbase` }], isError: false };
-
-        case 'browserbase_take_screenshot':
-          // Replace with: await browserbaseClient.takeScreenshot(this.currentSessionId, { ref: params.ref, raw: params.raw, ... });
-          // This might return image data that needs handling/resource registration.
-          console.warn(`[Context] Placeholder: Simulating Browserbase takeScreenshot for ref ${params.ref ?? 'viewport'}`);
-          // Adapt return value based on actual API response and resource handling needs.
-          return { content: [{ type: 'text', text: `Screenshot taken for ${params.element ?? 'viewport'} via Browserbase` }], isError: false };
-
-        // Add cases for other Browserbase tools (navigate, etc.)
-
-        default:
-          console.error(`[Context] No Browserbase dispatch logic for tool: ${toolName}`);
-          return this.createErrorResult(`Unsupported tool for direct Browserbase dispatch: ${toolName}`, toolName);
-      }
-    } catch (apiError) {
-      console.error(`[Context] Browserbase API call failed for ${toolName}:`, apiError);
-      return this.createErrorResult(
-        `Browserbase API error for ${toolName}: ${apiError instanceof Error ? apiError.message : String(apiError)}`,
-        toolName
-      );
-    }
-  }
-
   // Make sure the close method is properly part of the class
   async close(): Promise<void> {
-    // ... existing code ...
+    // Use the centralized close function from sessionManager
+    await closeAllSessions(); // Assuming sessionManager exposes this
+    // Clear any context-specific state if needed
+    this.screenshots.clear();
+    this.latestSnapshots.clear();
+    this.screenshotResources.clear();
+    this.currentSessionId = defaultSessionId; // Reset to default
   }
 }
