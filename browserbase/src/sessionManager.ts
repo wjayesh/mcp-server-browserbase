@@ -48,7 +48,11 @@ export function getActiveSessionId(): string { // Added 'export function'
 // Function to create a new Browserbase session and connect Playwright
 export async function createNewBrowserSession(
   newSessionId: string,
-  config: Config // Accept config object
+  config: Config, // Accept config object
+  options?: {
+    contextId?: string;
+    persistContext?: boolean;
+  }
 ): Promise<BrowserSession> {
   // Add runtime checks here (SHOULD ALREADY EXIST from manual edit)
   if (!config.browserbaseApiKey) {
@@ -63,11 +67,26 @@ export async function createNewBrowserSession(
     apiKey: config.browserbaseApiKey!,
   });
 
-  const session = await bb.sessions.create({
+  // Prepare session creation options
+  const sessionOptions: any = {
     // Use non-null assertion after check
     projectId: config.browserbaseProjectId!,
     proxies: true, // Consider making this configurable via Config
-  });
+  };
+  
+  // Add context settings if provided
+  if (options?.contextId) {
+    sessionOptions.browserSettings = {
+      context: {
+        id: options.contextId,
+        persist: options.persistContext !== false, // Default to true if not specified
+      },
+    };
+    console.error(`Using context: ${options.contextId} with persist: ${options.persistContext !== false}`);
+  }
+
+  const session = await bb.sessions.create(sessionOptions);
+  console.error("Browserbase session created:", session.id);
 
   const browser = await chromium.connectOverCDP(session.connectUrl);
 

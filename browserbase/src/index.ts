@@ -18,6 +18,8 @@ import common from "./tools/common.js";
 import drag from "./tools/drag.js";
 import hover from "./tools/hover.js";
 import selectOption from "./tools/selectOption.js";
+import context from "./tools/context.js";
+import cookies from "./tools/cookies.js";
 
 // Environment variables configuration
 const requiredEnvVars = {
@@ -49,6 +51,8 @@ async function main() {
     ...getText,    // Spread the array exported by getText.ts
     ...navigate,   // Spread the array exported by navigate.ts
     session,       // Add the single tool object directly
+    ...context,
+    ...cookies,
   ];
 
   const toolsToUse = tools;
