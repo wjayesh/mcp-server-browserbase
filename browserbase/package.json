@@ -7,8 +7,8 @@
   "homepage": "https://modelcontextprotocol.io",
   "bugs": "https://github.com/modelcontextprotocol/servers/issues",
   "type": "module",
-  "bin": {
-    "mcp-server-browserbase": "dist/index.js"
+  "engines": {
+    "node": ">=18"
   },
   "files": [
     "dist"
@@ -19,17 +19,30 @@
     "watch": "tsc --watch",
     "inspector": "npx @modelcontextprotocol/inspector build/index.js"
   },
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  },
   "dependencies": {
     "@browserbasehq/sdk": "^2.0.0",
     "@modelcontextprotocol/sdk": "^1.10.2",
     "@types/yaml": "^1.9.6",
+    "commander": "^13.1.0",
+    "dotenv": "^16.5.0",
     "playwright": "^1.53.0-alpha-2025-05-05",
     "puppeteer-core": "^23.9.0",
     "yaml": "^2.7.1",
-    "zod": "^3.24.3"
+    "zod": "^3.24.3",
+    "zod-to-json-schema": "^3.24.5"
   },
   "devDependencies": {
     "shx": "^0.3.4",
     "typescript": "^5.6.2"
+  },
+  "bin": {
+    "mcp-server-browserbase": "cli.js"
   }
 }
