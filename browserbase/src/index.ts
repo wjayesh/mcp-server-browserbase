@@ -161,7 +161,7 @@ export async function createServer(config: Config): Promise<Server> {
   // Wrap server close to also close context
   const originalClose = server.close.bind(server);
   server.close = async () => {
-    await context.close();
+    // await context.closeSession();
     await originalClose();
   };
   
