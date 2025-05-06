@@ -6,7 +6,7 @@ import {
 } from "playwright-core";
 import { Browserbase } from "@browserbasehq/sdk";
 import type { Config } from "./config.js"; // Import Config type
-import { Writable } from 'stream'; // Import Writable for process.stderr
+import { Writable } from "stream"; // Import Writable for process.stderr
 
 // Define the type for a session object
 export type BrowserSession = { browser: Browser; page: Page };
@@ -25,17 +25,17 @@ let activeSessionId: string = defaultSessionId; // Changed 'private' to 'let'
  * Sets the active session ID.
  * @param id The ID of the session to set as active.
  */
-export function setActiveSessionId(id: string): void { // Added 'export function'
-  const logPrefix = `[SessionManager] ${new Date().toISOString()}:`;
-  // process.stderr.write(`${logPrefix} Attempting to set active session ID to: ${id}\\n`);
+export function setActiveSessionId(id: string): void {
+  // const logPrefix = `[SessionManager] ${new Date().toISOString()}:`;
   if (browsers.has(id) || id === defaultSessionId) {
     activeSessionId = id;
-    // process.stderr.write(`${logPrefix} Successfully set active session ID to: ${id}\\n`);
-    process.stderr.write(`[SessionManager] Active session set: ${id}\\n`);
+    // Change stdout to stderr for logging
+    process.stderr.write(`[SessionManager] Active session set: ${id}\n`);
   } else {
     // Use process.stderr.write for warnings too
-    // process.stderr.write(`${logPrefix} WARN - Attempted to set active session ID to non-existent session: ${id}. Keeping current: ${activeSessionId}\\n`);
-    process.stderr.write(`[SessionManager] WARN - Set active session failed for non-existent ID: ${id}\\n`);
+    process.stderr.write(
+      `[SessionManager] WARN - Set active session failed for non-existent ID: ${id}\n`
+    ); // Keep WARN
   }
 }
 
@@ -43,9 +43,7 @@ export function setActiveSessionId(id: string): void { // Added 'export function
  * Gets the active session ID.
  * @returns The active session ID.
  */
-export function getActiveSessionId(): string { // Added 'export function'
-  const logPrefix = `[SessionManager] ${new Date().toISOString()}:`;
-  // process.stderr.write(`${logPrefix} Getting active session ID. Current value: ${activeSessionId}\\n`);
+export function getActiveSessionId(): string {
   return activeSessionId;
 }
 
@@ -58,15 +56,14 @@ export async function createNewBrowserSession(
     persistContext?: boolean;
   }
 ): Promise<BrowserSession> {
-  const logPrefix = `[SessionManager.createNew ${newSessionId}] ${new Date().toISOString()}:`;
-  // Add runtime checks here (SHOULD ALREADY EXIST from manual edit)
+  // const logPrefix = `[SessionManager.createNew ${newSessionId}] ${new Date().toISOString()}:`;
   if (!config.browserbaseApiKey) {
-    throw new Error('Browserbase API Key is missing in the configuration.');
+    throw new Error("Browserbase API Key is missing in the configuration.");
   }
   if (!config.browserbaseProjectId) {
-      throw new Error('Browserbase Project ID is missing in the configuration.');
+    throw new Error("Browserbase Project ID is missing in the configuration.");
   }
-  
+
   const bb = new Browserbase({
     // Use non-null assertion after check
     apiKey: config.browserbaseApiKey!,
@@ -78,7 +75,7 @@ export async function createNewBrowserSession(
     projectId: config.browserbaseProjectId!,
     proxies: true, // Consider making this configurable via Config
   };
-  
+
   // Add context settings if provided
   if (options?.contextId) {
     sessionOptions.browserSettings = {
@@ -87,40 +84,45 @@ export async function createNewBrowserSession(
         persist: options.persistContext !== false, // Default to true if not specified
       },
     };
-    // Log context usage to stderr
-    // process.stderr.write(`${logPrefix} Using context: ${options.contextId} with persist: ${options.persistContext !== false}\\n`);
-    process.stderr.write(`[SessionManager] Using context ${options.contextId} for session ${newSessionId}\\n`);
   }
 
-  try { // Added top-level try-catch for create session
-    // process.stderr.write(`${logPrefix} Attempting Browserbase session create with options: ${JSON.stringify(sessionOptions)}\\n`);
-    process.stderr.write(`[SessionManager] Creating session ${newSessionId}...\\n`);
+  try {
+    // Added top-level try-catch for create session
+    // Change stdout to stderr for logging
+    process.stderr.write(
+      `[SessionManager] Creating session ${newSessionId}...\n`
+    );
     const session = await bb.sessions.create(sessionOptions);
-    // process.stderr.write(`${logPrefix} Browserbase session created: ${session.id}\\n`);
-    process.stderr.write(`[SessionManager] Browserbase session created: ${session.id}\\n`); // Use the actual ID returned
+    // Change stdout to stderr for logging
+    process.stderr.write(
+      `[SessionManager] Browserbase session created: ${session.id}\n`
+    ); // Use the actual ID returned
 
-    // process.stderr.write(`${logPrefix} Connecting Playwright over CDP: ${session.connectUrl}\\n`);
     const browser = await chromium.connectOverCDP(session.connectUrl);
-    // process.stderr.write(`${logPrefix} Playwright connected successfully.\\n`);
 
     // Handle unexpected disconnects
     browser.on("disconnected", () => {
-      const disconnectLogPrefix = `[SessionManager Disconnect] ${new Date().toISOString()}:`;
-      // process.stderr.write(`${disconnectLogPrefix} Browser disconnected for session: ${newSessionId}\\n`);
-      process.stderr.write(`[SessionManager] Disconnected: ${newSessionId}\\n`);
+      // Change stdout to stderr for logging
+      process.stderr.write(`[SessionManager] Disconnected: ${newSessionId}\n`);
       browsers.delete(newSessionId);
       // If the disconnected browser was the default one, clear the global reference
       if (defaultBrowserSession && defaultBrowserSession.browser === browser) {
-        // process.stderr.write(`${disconnectLogPrefix} Disconnected browser was the default session. Clearing reference.\\n`);
-        process.stderr.write(`[SessionManager] Disconnected (default): ${newSessionId}\\n`);
+        // Change stdout to stderr for logging
+        process.stderr.write(
+          `[SessionManager] Disconnected (default): ${newSessionId}\n`
+        );
         defaultBrowserSession = null;
         // If the default session disconnects, maybe reset activeId? Or let ensure handle it?
         // For now, we won't reset activeSessionId here, ensureDefaultSessionInternal will handle creating a new default.
       }
       // If a non-default active session disconnects, reset to default
-      if (activeSessionId === newSessionId && newSessionId !== defaultSessionId) {
-        // process.stderr.write(`${disconnectLogPrefix} WARN - Active session ${newSessionId} disconnected. Resetting active session ID to default.\\n`);
-        process.stderr.write(`[SessionManager] WARN - Active session disconnected, resetting to default: ${newSessionId}\\n`);
+      if (
+        activeSessionId === newSessionId &&
+        newSessionId !== defaultSessionId
+      ) {
+        process.stderr.write(
+          `[SessionManager] WARN - Active session disconnected, resetting to default: ${newSessionId}\n`
+        ); // Keep WARN
         setActiveSessionId(defaultSessionId);
       }
     });
@@ -148,108 +150,146 @@ export async function createNewBrowserSession(
     setActiveSessionId(newSessionId); // Added this call
     // Log session creation success to stderr
     // process.stderr.write(`${logPrefix} Created and set active session ID to: ${newSessionId}\\n`);
-    process.stderr.write(`[SessionManager] Session created and active: ${newSessionId}\\n`);
+    // Change stdout to stderr for logging
+    process.stderr.write(
+      `[SessionManager] Session created and active: ${newSessionId}\n`
+    );
 
     return sessionObj;
   } catch (creationError) {
-      // Log the raw creation/connection error to stderr
-      // process.stderr.write(`${logPrefix} Raw session creation/connection error: ${creationError}\\n`);
-      // process.stderr.write(`${logPrefix} Failed during session creation or CDP connection for ID ${newSessionId}: ${creationError instanceof Error ? creationError.message : String(creationError)}\\n`);
-      // Log stack trace
-      // process.stderr.write(`${logPrefix} Creation Error Stack: ${creationError instanceof Error ? creationError.stack : 'N/A'}\\n`);
-      process.stderr.write(`[SessionManager] ERROR creating session ${newSessionId}: ${creationError instanceof Error ? creationError.message : String(creationError)}\\n`);
-      // Attempt to clean up partially created resources if possible (e.g., close browser if connection succeeded but context/page failed)
-      // This part is complex, might need more state tracking. For now, just log and re-throw.
-      throw new Error(`Failed to create/connect session ${newSessionId}: ${creationError instanceof Error ? creationError.message : String(creationError)}`);
+    // Log the raw creation/connection error to stderr  
+    process.stderr.write(
+      `[SessionManager] Creating session ${newSessionId} failed: ${
+        creationError instanceof Error
+          ? creationError.message
+          : String(creationError)
+      }
+`
+    ); // Keep ERROR comment if useful, but removed from output
+    // Attempt to clean up partially created resources if possible (e.g., close browser if connection succeeded but context/page failed)
+    // This part is complex, might need more state tracking. For now, just log and re-throw.
+    throw new Error(
+      `Failed to create/connect session ${newSessionId}: ${
+        creationError instanceof Error
+          ? creationError.message
+          : String(creationError)
+      }`
+    );
   }
 }
 
 // Internal function to ensure default session, passes config down
-export async function ensureDefaultSessionInternal(config: Config): Promise<BrowserSession> {
+export async function ensureDefaultSessionInternal(
+  config: Config
+): Promise<BrowserSession> {
   const sessionId = defaultSessionId;
   let sessionNeedsUpdate = false;
   try {
-    const logPrefix = `[SessionManager.ensureDefault] ${new Date().toISOString()}:`;
     // Check if default session exists
     if (!defaultBrowserSession) {
-      // process.stderr.write(`${logPrefix} Default session object not found, creating a new one.\\n`);
-      process.stderr.write(`[SessionManager] Ensuring default session (creating): ${sessionId}\\n`);
+      // Change stdout to stderr for logging
+      process.stderr.write(
+        `[SessionManager] Ensuring default session (creating): ${sessionId}\n`
+      );
       sessionNeedsUpdate = true;
-    // Check if browser disconnected or page closed
-    } else if (!defaultBrowserSession.browser.isConnected() || defaultBrowserSession.page.isClosed()) {
-      // process.stderr.write(`${logPrefix} Default session browser disconnected or page closed, recreating.\\n`);
-      process.stderr.write(`[SessionManager] Ensuring default session (recreating): ${sessionId}\\n`);
+      // Check if browser disconnected or page closed
+    } else if (
+      !defaultBrowserSession.browser.isConnected() ||
+      defaultBrowserSession.page.isClosed()
+    ) {
+      // Change stdout to stderr for logging
+      process.stderr.write(
+        `[SessionManager] Ensuring default session (recreating): ${sessionId}\n`
+      );
       try {
         // Attempt to close the old browser instance cleanly
-        // process.stderr.write(`${logPrefix} Attempting to close disconnected/closed session: ${sessionId}\\n`);
-        process.stderr.write(`[SessionManager] Closing stale default session: ${sessionId}\\n`);
+        // Change stdout to stderr for logging
+        process.stderr.write(
+          `[SessionManager] Closing stale default session: ${sessionId}\n`
+        );
         await defaultBrowserSession.browser.close();
       } catch (closeError) {
-        // process.stderr.write(`${logPrefix} Error closing disconnected/closed session: ${closeError instanceof Error ? closeError.message : String(closeError)}\\n`);
-        process.stderr.write(`[SessionManager] WARN - Error closing stale default session ${sessionId}: ${closeError instanceof Error ? closeError.message : String(closeError)}\\n`);
+        process.stderr.write(
+          `[SessionManager] WARN - Error closing stale default session ${sessionId}: ${
+            closeError instanceof Error
+              ? closeError.message
+              : String(closeError)
+          }\\n`
+        ); // Keep WARN
       } finally {
         // Clear references regardless of close success
-        // process.stderr.write(`${logPrefix} Clearing stale default session references.\\n`);
         defaultBrowserSession = null;
         browsers.delete(sessionId);
-         sessionNeedsUpdate = true;
+        sessionNeedsUpdate = true;
       }
     }
 
     // If needed, create a new session
     if (sessionNeedsUpdate) {
       defaultBrowserSession = await createNewBrowserSession(sessionId, config); // createNew sets it active
-      // process.stderr.write(`${logPrefix} New default session created.\\n`);
-       // No need to call setActiveSessionId here, createNewBrowserSession does it.
-       return defaultBrowserSession;
+      return defaultBrowserSession;
     }
 
     // If we reached here, the existing default session seems okay initially.
-    // process.stderr.write(`${logPrefix} Existing default session seems connected.\\n`);
-    process.stderr.write(`[SessionManager] Ensuring default session (using existing): ${sessionId}\\n`);
+    // Change stdout to stderr for logging
+    process.stderr.write(
+      `[SessionManager] Ensuring default session (using existing): ${sessionId}\\n`
+    );
     setActiveSessionId(defaultSessionId); // Ensure default is marked active if we are using it
     return defaultBrowserSession!; // Non-null assertion as it's checked/created above
-
   } catch (error) {
-     // Log the raw error from the ensuring process to stderr
-     const logPrefix = `[SessionManager.ensureDefault Error] ${new Date().toISOString()}:`;
-     // process.stderr.write(`${logPrefix} Raw error during ensuring process: ${error}\\n`);
-     // process.stderr.write(`${logPrefix} Error during default session ensuring process: ${error instanceof Error ? error.message : String(error)}\\n`);
-     // process.stderr.write(`${logPrefix} Error Stack: ${error instanceof Error ? error.stack : 'N/A'}\\n`);
-     process.stderr.write(`[SessionManager] ERROR ensuring default session ${defaultSessionId}: ${error instanceof Error ? error.message : String(error)}\\n`);
+    process.stderr.write(
+      `[SessionManager] Ensuring default session ${defaultSessionId} failed: ${
+        error instanceof Error ? error.message : String(error)
+      }\n`
+    ); // Keep ERROR comment if useful, but removed from output
 
     // More robust error handling: attempt to close browser if it exists
     const problematicSession = browsers.get(defaultSessionId);
     if (problematicSession?.browser?.isConnected()) {
       try {
-        // process.stderr.write(`${logPrefix} Attempting to close problematic browser during error handling.\\n`);
-        process.stderr.write(`[SessionManager] Closing problematic default session during error handling: ${defaultSessionId}\\n`);
+        // Change stdout to stderr for logging
+        process.stderr.write(
+          `[SessionManager] Closing problematic default session during error handling: ${defaultSessionId}\\n`
+        );
         await problematicSession.browser.close();
         browsers.delete(defaultSessionId); // Clean up map if close succeeds
       } catch (e) {
-        // process.stderr.write(`${logPrefix} Error closing browser during error handling: ${e instanceof Error ? e.message : String(e)}\\n`);
-        process.stderr.write(`[SessionManager] WARN - Error closing problematic default session ${defaultSessionId} during error handling: ${e instanceof Error ? e.message : String(e)}\\n`);
+        process.stderr.write(
+          `[SessionManager] WARN - Error closing problematic default session ${defaultSessionId} during error handling: ${
+            e instanceof Error ? e.message : String(e)
+          }\\n`
+        ); // Keep WARN
       }
     } else {
       // Ensure cleanup even if browser wasn't connected or session didn't exist
-      // process.stderr.write(`${logPrefix} Problematic browser not connected or session not found. Ensuring map cleanup.\\n`);
-      process.stderr.write(`[SessionManager] Problematic default session ${defaultSessionId} not connected or not found during error handling.\\n`);
+      // Change stdout to stderr for logging
+      process.stderr.write(
+        `[SessionManager] Problematic default session ${defaultSessionId} not connected or not found during error handling.\\n`
+      );
       browsers.delete(defaultSessionId);
     }
 
     // Re-throw the error after attempting cleanup? Or try recreating?
     // Let's try recreating once.
-    // process.stderr.write(`${logPrefix} Recreating session after critical error or timeout.\\n`);
-    process.stderr.write(`[SessionManager] Attempting recreation of default session ${defaultSessionId} after error.\\n`);
+    // Change stdout to stderr for logging
+    process.stderr.write(
+      `[SessionManager] Attempting recreation of default session ${defaultSessionId} after error.\\n`
+    );
     try {
-      const newSession = await createNewBrowserSession(defaultSessionId, config);
+      const newSession = await createNewBrowserSession(
+        defaultSessionId,
+        config
+      );
       browsers.set(defaultSessionId, newSession);
       activeSessionId = defaultSessionId; // Set as active
       return newSession;
     } catch (retryError) {
-      // process.stderr.write(`${logPrefix} Raw error during session recreation attempt: ${retryError}\\n`);
-      // process.stderr.write(`${logPrefix} Failed to recreate session after error: ${retryError instanceof Error ? retryError.message : String(retryError)}\\n`);
-      process.stderr.write(`[SessionManager] ERROR - Failed to recreate default session ${defaultSessionId} after error: ${retryError instanceof Error ? retryError.message : String(retryError)}\\n`);
+      process.stderr.write(
+        `[SessionManager] Failed to recreate default session ${defaultSessionId} after error: ${
+          retryError instanceof Error ? retryError.message : String(retryError)
+        }\n`
+      ); // Keep ERROR comment if useful, but removed from output
       throw new Error(
         `Failed to ensure default session after initial error and retry: ${
           retryError instanceof Error ? retryError.message : String(retryError)
@@ -260,83 +300,99 @@ export async function ensureDefaultSessionInternal(config: Config): Promise<Brow
 }
 
 // Get a specific session by ID, needs config to create/recover default
-export async function getSession(sessionId: string, config: Config): Promise<BrowserSession | null> {
-    const logPrefix = `[SessionManager.getSession ${sessionId}] ${new Date().toISOString()}:`;
-    if (sessionId === defaultSessionId) {
-        try {
-            // ensureDefaultSessionInternal handles creation and setting active ID
-            // process.stderr.write(`${logPrefix} Requested default session. Ensuring internal...\\n`);
-            return await ensureDefaultSessionInternal(config); 
-        } catch (error) {
-            // process.stderr.write(`${logPrefix} Error ensuring default session: ${error}\\n`);
-            process.stderr.write(`[SessionManager] ERROR - Failed ensureDefaultSessionInternal call for ${sessionId}: ${error instanceof Error ? error.message : String(error)}\\n`);
-            return null;
-        }
-    }
-
-    // For non-default sessions
-    // process.stderr.write(`${logPrefix} Attempting to retrieve non-default session.\\n`);
-    process.stderr.write(`[SessionManager] Getting session: ${sessionId}\\n`);
-    let sessionObj = browsers.get(sessionId);
-    if (!sessionObj) {
-        // process.stderr.write(`${logPrefix} WARN - Session not found in map.\\n`);
-        process.stderr.write(`[SessionManager] WARN - Session not found: ${sessionId}\\n`);
-        return null;
-    }
-
-    // Validate the found session
+export async function getSession(
+  sessionId: string,
+  config: Config
+): Promise<BrowserSession | null> {
+  const logPrefix = `[SessionManager.getSession ${sessionId}] ${new Date().toISOString()}:`;
+  if (sessionId === defaultSessionId) {
     try {
-        // process.stderr.write(`${logPrefix} Validating retrieved session...\\n`);
-        if (!sessionObj.browser.isConnected() || sessionObj.page.isClosed()) {
-            // process.stderr.write(`${logPrefix} WARN - Session browser disconnected or page closed. Cleaning up.\\n`);
-            process.stderr.write(`[SessionManager] WARN - Session invalid (disconnected/closed): ${sessionId}\\n`);
-            try { await sessionObj.browser.close(); } catch (e) { /* Ignore close error */ }
-            browsers.delete(sessionId);
-             // If the invalidated session was the active one, reset active to default
-            if(activeSessionId === sessionId) {
-                // process.stderr.write(`${logPrefix} WARN - Invalidated session was active. Resetting active session to default.\\n`);
-                process.stderr.write(`[SessionManager] WARN - Invalidated active session, resetting to default: ${sessionId}\\n`);
-                setActiveSessionId(defaultSessionId);
-            }
-            return null;
-        }
-        // Session appears valid, make it active
-        // process.stderr.write(`${logPrefix} Session validated. Setting as active.\\n`);
-        process.stderr.write(`[SessionManager] Session valid and now active: ${sessionId}\\n`);
-        setActiveSessionId(sessionId); // Set valid retrieved session as active
-        return sessionObj;
-    } catch (validationError) {
-        // Log the raw validation error to stderr
-        // process.stderr.write(`${logPrefix} Raw session validation error: ${validationError}\\n`);
-        // process.stderr.write(`${logPrefix} Session validation error: ${validationError instanceof Error ? validationError.message : String(validationError)}\\n`);
-        // process.stderr.write(`${logPrefix} Validation Error Stack: ${validationError instanceof Error ? validationError.stack : 'N/A'}\\n`);
-        process.stderr.write(`[SessionManager] ERROR - Session validation error for ${sessionId}: ${validationError instanceof Error ? validationError.message : String(validationError)}\\n`);
-        try { await sessionObj.browser.close(); } catch (e) { /* Ignore close error */ }
-        browsers.delete(sessionId);
-         // If the invalidated session was the active one, reset active to default
-        if(activeSessionId === sessionId) {
-            // process.stderr.write(`${logPrefix} WARN - Invalidated session was active during validation error. Resetting active session to default.\\n`);
-            process.stderr.write(`[SessionManager] WARN - Invalidated active session during validation error, resetting to default: ${sessionId}\\n`);
-            setActiveSessionId(defaultSessionId);
-        }
-        return null;
+      // ensureDefaultSessionInternal handles creation and setting active ID
+      return await ensureDefaultSessionInternal(config);
+    } catch (error) {
+      process.stderr.write(
+        `[SessionManager] Failed ensureDefaultSessionInternal call for ${sessionId}: ${
+          error instanceof Error ? error.message : String(error)
+        }\n`
+      ); // Keep ERROR comment if useful, but removed from output
+      return null;
     }
+  }
+
+  // For non-default sessions
+  // Change stdout to stderr for logging
+  process.stderr.write(`[SessionManager] Getting session: ${sessionId}\\n`);
+  let sessionObj = browsers.get(sessionId);
+  if (!sessionObj) {
+    process.stderr.write(
+      `[SessionManager] WARN - Session not found: ${sessionId}\\n`
+    ); // Keep WARN
+    return null;
+  }
+
+  // Validate the found session
+  try {
+    if (!sessionObj.browser.isConnected() || sessionObj.page.isClosed()) {
+      try {
+        await sessionObj.browser.close();
+      } catch (e) {
+        /* Ignore close error */
+      }
+      browsers.delete(sessionId);
+      // If the invalidated session was the active one, reset active to default
+      if (activeSessionId === sessionId) {
+        process.stderr.write(
+          `[SessionManager] WARN - Invalidated active session, resetting to default: ${sessionId}\\n`
+        ); // Keep WARN
+        setActiveSessionId(defaultSessionId);
+      }
+      return null;
+    }
+    // Session appears valid, make it active
+    setActiveSessionId(sessionId); // Set valid retrieved session as active
+    return sessionObj;
+  } catch (validationError) {
+    // Log the raw validation error to stderr
+    process.stderr.write(
+      `[SessionManager] Session validation failed for ${sessionId}: ${
+        validationError instanceof Error
+          ? validationError.message
+          : String(validationError)
+      }\n`
+    ); // Keep ERROR comment if useful, but removed from output
+    try {
+      await sessionObj.browser.close();
+    } catch (e) {
+      /* Ignore close error */
+    }
+    browsers.delete(sessionId);
+    // If the invalidated session was the active one, reset active to default
+    if (activeSessionId === sessionId) {
+      process.stderr.write(
+        `[SessionManager] WARN - Invalidated active session during validation error, resetting to default: ${sessionId}\\n`
+      ); // Keep WARN
+      setActiveSessionId(defaultSessionId);
+    }
+    return null;
+  }
 }
 
 // Function to close all managed browser sessions gracefully
 export async function closeAllSessions(): Promise<void> {
-  const logPrefix = `[SessionManager] ${new Date().toISOString()}:`;
-  // process.stderr.write(`${logPrefix} Closing all sessions.\\n`);
+  // Change stdout to stderr for logging
   process.stderr.write(`[SessionManager] Closing all sessions...\\n`);
   const closePromises: Promise<void>[] = [];
   for (const [id, session] of browsers.entries()) {
     if (session.browser) {
-      // process.stderr.write(`${logPrefix} Closing session ${id}\\n`);
+      // Change stdout to stderr for logging
       process.stderr.write(`[SessionManager] Closing session: ${id}\\n`);
       closePromises.push(
-        session.browser.close().catch(e => {
-          // process.stderr.write(`${logPrefix} Error closing session ${id}: ${e instanceof Error ? e.message : String(e)}\\n`);
-          process.stderr.write(`[SessionManager] WARN - Error closing session ${id}: ${e instanceof Error ? e.message : String(e)}\\n`);
+        session.browser.close().catch((e) => {
+          process.stderr.write(
+            `[SessionManager] WARN - Error closing session ${id}: ${
+              e instanceof Error ? e.message : String(e)
+            }\\n`
+          ); // Keep WARN
         })
       );
     }
@@ -345,6 +401,6 @@ export async function closeAllSessions(): Promise<void> {
   browsers.clear();
   defaultBrowserSession = null; // Ensure default session reference is cleared
   setActiveSessionId(defaultSessionId); // Reset active session to default after closing all
-  // process.stderr.write(`${logPrefix} All sessions closed and cleared.\\n`);
+  // Change stdout to stderr for logging
   process.stderr.write(`[SessionManager] All sessions closed and cleared.\\n`);
 }

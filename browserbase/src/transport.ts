@@ -35,7 +35,7 @@ async function handleSSE(req: http.IncomingMessage, res: http.ServerResponse, ur
       sessions.delete(transport.sessionId);
       serverList.close(server).catch(e => {
         // eslint-disable-next-line no-console
-        console.error(e);
+        // console.error(e);
       });
     });
     return await server.connect(transport);
@@ -113,6 +113,6 @@ export function startHttpTransport(port: number, hostname: string | undefined, s
       'If your client supports streamable HTTP, you can use the /mcp endpoint instead.',
     ].join('\n');
     // eslint-disable-next-line no-console
-    console.log(message);
+    // console.log(message);
   });
 }

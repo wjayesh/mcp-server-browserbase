@@ -274,7 +274,6 @@ export class Context {
       }
       try {
         locator = page.locator(identifier);
-        process.stderr.write(`[Context.executeRefAction ${toolName} Pre-Action] Using provided CSS selector: ${identifier}\\n`);
       } catch (locatorError) {
         throw new Error(`Failed to create locator for selector '${identifier}': ${locatorError instanceof Error ? locatorError.message : String(locatorError)}`);
       }
@@ -290,7 +289,6 @@ export class Context {
       try {
         // Resolve using the snapshot we just retrieved
         locator = snapshot.refLocator(identifier);
-        process.stderr.write(`[Context.executeRefAction ${toolName} Pre-Action] Successfully resolved ref ${identifier} using existing snapshot - ${initialSnapshotIdentifier}\\n`);
       } catch (locatorError) {
         // Use the existing snapshot identifier in the error
         throw new Error(
@@ -303,21 +301,10 @@ export class Context {
     } else {
        // No identifier needed or provided
        identifierType = "none"; // Explicitly set to none
-       process.stderr.write(`[Context.executeRefAction ${toolName} Pre-Action] No ref or selector required/provided.\\n`);
     }
 
     // --- Single Attempt ---
-    const logPrefix = `[Context.executeRefAction ${toolName}] ${new Date().toISOString()}:`;
     try {
-      // Log which identifier/locator we ARE using for this attempt
-      if (identifierType === "selector") {
-        process.stderr.write(`${logPrefix} Using locator resolved from selector: ${identifier}\\n`);
-      } else if (identifierType === "ref") {
-        process.stderr.write(`${logPrefix} Using locator resolved from ref: ${identifier} (Snapshot: ${initialSnapshotIdentifier})\\n`);
-      } else {
-        process.stderr.write(`${logPrefix} Proceeding without specific element locator.\\n`);
-      }
-
       // Pass page, the used identifier (selector or ref), args, the resolved locator, and identifierType
       const actionFnResult = await actionFn(page, identifier, validatedArgs, locator, identifierType);
 
@@ -342,7 +329,6 @@ export class Context {
       lastError = null;
       return { resultText, actionResult };
     } catch (error: any) {
-      // Throw the error immediately if the single attempt fails
       throw new Error(
         `Action ${toolName} failed: ${error instanceof Error ? error.message : String(error)}`
       );
@@ -351,10 +337,6 @@ export class Context {
 
   async run(tool: Tool<any>, args: any): Promise<CallToolResult> {
     const toolName = tool.schema.name;
-    const logRunPrefix = `[Context.run ${toolName}]`; // Prefix for run-level logs
-    // --- NEW LOG ---\n    // console.error(`${logRunPrefix} START Received tool Args: ${JSON.stringify(args)}`);
-    process.stderr.write(`${logRunPrefix} START Received tool Args: ${JSON.stringify(args)}\\n`); // Changed and added newline
-    // -------------
     let initialPage: Page | null = null;
     let initialBrowser: BrowserSession["browser"] | null = null;
     let toolResultFromHandle: ToolResult | null = null; // Legacy handle result
@@ -461,8 +443,7 @@ export class Context {
         process.stderr.write(`${logPrefix} Error executing tool ${toolName}: ${error instanceof Error ? error.message : String(error)}\\n`); // Changed and added newline
         // --- LOG STACK TRACE ---
         if (error instanceof Error && error.stack) {
-          // console.error(`${logPrefix} Stack Trace: ${error.stack}`);
-          process.stderr.write(`${logPrefix} Stack Trace: ${error.stack}\\n`); // Changed and added newline
+          process.stderr.write(`${logPrefix} Stack Trace: ${error.stack}\\n`); 
         }
         // -----------------------
         finalResult = this.createErrorResult(
@@ -484,18 +465,12 @@ export class Context {
           try {
             postActionSnapshot = await this.captureSnapshot();
             if (postActionSnapshot) {
-              // Log successful snapshot capture and storage
-              // console.error(`[Context.run ${toolName}] Adding final snapshot to result.`);
-              process.stderr.write(`[Context.run ${toolName}] Adding final snapshot to result.\\n`); // Changed and added newline
-              // finalResult.snapshot = postActionSnapshot.render(); // REMOVED - .render() doesn't exist and text is added later
+              process.stderr.write(`[Context.run ${toolName}] Added snapshot to final result text.\n`);
             } else {
-              // console.error(`[Context.run ${toolName}] WARN: Snapshot was expected after action but failed to capture.`);
-              process.stderr.write(`[Context.run ${toolName}] WARN: Snapshot was expected after action but failed to capture.\\n`); // Changed and added newline
+              process.stderr.write(`[Context.run ${toolName}] WARN: Snapshot was expected after action but failed to capture.\n`); // Keep warning
             }
           } catch (postSnapError) {
-            // Log warning, don't fail the whole operation
-            // console.warn(`${logPrefix} Error capturing post-action snapshot: ${postSnapError instanceof Error ? postSnapError.message : String(postSnapError)}`);
-            process.stderr.write(`[Context.run ${toolName}] WARN: Error capturing post-action snapshot: ${postSnapError instanceof Error ? postSnapError.message : String(postSnapError)}\\n`); // Changed and added newline
+            process.stderr.write(`[Context.run ${toolName}] WARN: Error capturing post-action snapshot: ${postSnapError instanceof Error ? postSnapError.message : String(postSnapError)}\n`); // Keep warning
           }
         } else if (
           actionSucceeded &&
@@ -527,8 +502,6 @@ export class Context {
           const snapshotToAdd = postActionSnapshot;
           if (snapshotToAdd) {
             finalOutputText += `\n\n- Page Snapshot\n\`\`\`yaml\n${snapshotToAdd.text()}\n\`\`\`\n`;
-            // console.error(`[Context.run ${toolName}] Added snapshot to final result text.`);
-            process.stderr.write(`[Context.run ${toolName}] Added snapshot to final result text.\\n`); // Changed and added newline
           } else {
             finalOutputText += `\n\n- [No relevant snapshot available after action]`;
           }
@@ -546,15 +519,10 @@ export class Context {
              );
           }
         }
-
-        // --- NEW LOG ---\n      // console.error(`[Context.run ${toolName}] END Returning result: ${JSON.stringify(finalResult)?.substring(0, 200)}...`);
-        process.stderr.write(`[Context.run ${toolName}] END Returning result: ${JSON.stringify(finalResult)?.substring(0, 200)}...\\n`); // Changed and added newline
-        // -------------
-
         return finalResult;
       }
     } catch (error) {
-      process.stderr.write(`${logPrefix} Error running tool ${toolName}: ${error instanceof Error ? error.message : String(error)}\\n`); // Changed and added newline
+      process.stderr.write(`${logPrefix} Error running tool ${toolName}: ${error instanceof Error ? error.message : String(error)}\n`); 
       throw error;
     }
   }

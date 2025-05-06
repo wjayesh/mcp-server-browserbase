@@ -84,6 +84,7 @@ export async function createServer(config: Config): Promise<Server> {
       const resourceContent = context.readResource(request.params.uri.toString());
       return { contents: [resourceContent] };
     } catch (error) {
+      // Keep this error log
       console.error(`Error reading resource via context: ${error}`);
       throw error;
     }
@@ -102,6 +103,7 @@ export async function createServer(config: Config): Promise<Server> {
           finalInputSchema = tool.schema.inputSchema;
         } else {
           // Fallback or error handling if schema is neither
+          // Keep this error log
           console.error(`Warning: Tool '${tool.schema.name}' has an unexpected inputSchema type.`);
           finalInputSchema = { type: "object" }; // Default to empty object schema
         }
@@ -121,40 +123,27 @@ export async function createServer(config: Config): Promise<Server> {
       process.stderr.write(`[server.ts Error] ${new Date().toISOString()} ${message}\\n`);
     };
 
-    const errorResult = (...messages: string[]) => {
-      const result = {
-        content: [{ type: 'text', text: messages.join('\\n') }],
-        isError: true,
-      };
-      logError(`Returning error: ${JSON.stringify(result)}`); // Log the error structure
-      return result;
-    };
-
     // Use the map built from the passed-in tools
     const tool = toolsMap.get(request.params.name);
 
     if (!tool) {
       // Use the explicit error logger
       logError(`Tool "${request.params.name}" not found.`);
-      // Check if it was a placeholder tool that wasn't implemented
-      // This requires access to the original placeholder definitions,
-      // maybe pass placeholder names/schemas separately or handle in Context?
-      // For now, just return not found.
-      return errorResult(`Tool "${request.params.name}" not found`);
+      // Return a simplified error object
+      return { content: [{ type: 'text', text: `Tool "${request.params.name}" not found` }], isError: true };
     }
 
     try {
       // Delegate execution to the context
       const result = await context.run(tool, request.params.arguments ?? {});
-      // Log the successful result structure just before returning
-      process.stderr.write(`[server.ts Success] ${new Date().toISOString()} Returning result for ${request.params.name}: ${JSON.stringify(result)}\\n`);
       return result;
     } catch (error) {
       // Use the explicit error logger
       const errorMessage = error instanceof Error ? error.message : String(error);
       logError(`Error running tool ${request.params.name} via context: ${errorMessage}`);
       logError(`Original error stack (if available): ${error instanceof Error ? error.stack : 'N/A'}`); // Log stack trace
-      return errorResult(`Failed to run tool '${request.params.name}': ${errorMessage}`);
+      // Return a simplified error object
+      return { content: [{ type: 'text', text: `Failed to run tool '${request.params.name}': ${errorMessage}` }], isError: true };
     }
   });
 
