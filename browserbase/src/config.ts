@@ -1,7 +1,8 @@
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
-import { sanitizeForFilePath } from './tools/utils.js'; // Assuming this path is correct
+import { sanitizeForFilePath } from './tools/utils.js'; 
+import type { Cookie } from "playwright-core";
 
 export type ToolCapability = 'core' | string; // Example capabilities
 
@@ -17,7 +18,7 @@ export interface Config {
     contextId?: string;
     persist?: boolean;
   };
-  cookies?: JSON;
+  cookies?: Cookie[]; 
 }
 
 // Define Command Line Options Structure
@@ -29,7 +30,7 @@ export type CLIOptions = {
   persist?: boolean;
   port?: number;
   host?: string;
-  cookies?: JSON;
+  cookies?: Cookie[];
 };
 
 // Default Configuration Values

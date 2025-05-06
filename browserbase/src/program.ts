@@ -19,7 +19,7 @@ program
     .option('--persist [boolean]', 'Whether to persist the Browserbase context', true)
     .option('--port <port>', 'Port to listen on for SSE transport.')
     .option('--host <host>', 'Host to bind server to. Default is localhost. Use 0.0.0.0 to bind to all interfaces.')
-    .option('--cookies [json]', 'Inject cookies into the Browserbase context.')
+    .option('--cookies [json]', 'JSON array of cookies to inject into the browser. Format: [{"name":"cookie1","value":"val1","domain":"example.com"}, ...]')
     .action(async options => {
       const config = await resolveConfig(options);
       const serverList = new ServerList(async() => createServer(config));

@@ -1,3 +1,5 @@
+import type { Cookie } from "playwright-core";
+
 export type Config = {
     /**
      * The Browserbase API Key to use
@@ -32,8 +34,9 @@ export type Config = {
     };
     /**
      * Cookies to inject into the Browserbase context
+     * Format: Array of cookie objects with name, value, domain, and optional path, expires, httpOnly, secure, sameSite
      */
-    cookies?: JSON;
+    cookies?: Cookie[];
     /**
      * Whether or not to port to a server
      * 

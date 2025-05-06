@@ -7,7 +7,7 @@ import { Browserbase } from "@browserbasehq/sdk";
 import type { Config } from "./config.js"; // Import Config type
 import { SessionCreateParams } from "@browserbasehq/sdk/src/resources/sessions/sessions.js";
 // import { Writable } from "stream"; // Import Writable for process.stderr
-
+import type { Cookie } from "playwright-core";
 // Define the type for a session object
 export type BrowserSession = {
   browser: Browser;
@@ -26,18 +26,6 @@ type SessionCreationOptions = {
   };
   // Add other potential Browserbase session options here if needed
 };
-
-// Cookie interface matching Playwright's cookie format
-export interface Cookie {
-  name: string;
-  value: string;
-  domain: string;
-  path?: string;
-  expires?: number;
-  httpOnly?: boolean;
-  secure?: boolean;
-  sameSite?: "Strict" | "Lax" | "None";
-}
 
 // Global state for managing browser sessions
 const browsers = new Map<string, BrowserSession>();
@@ -211,8 +199,14 @@ export async function createNewBrowserSession(
         ? creationError.message
         : String(creationError);
     process.stderr.write(
-      `[SessionManager] Creating session ${newSessionId} failed: ${errorMessage}\n`
-    );
+      `[SessionManager] Creating session ${newSessionId} failed: ${
+        creationError instanceof Error
+          ? creationError.message
+          : String(creationError)
+      }`
+    ); // Keep ERROR comment if useful, but removed from output
+    // Attempt to clean up partially created resources if possible (e.g., close browser if connection succeeded but context/page failed)
+    // This part is complex, might need more state tracking. For now, just log and re-throw.
     throw new Error(
       `Failed to create/connect session ${newSessionId}: ${errorMessage}`
     );
