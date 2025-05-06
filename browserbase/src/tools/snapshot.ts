@@ -23,14 +23,13 @@ import type {
 } from "@modelcontextprotocol/sdk/types.js";
 
 import { defineTool, type ToolResult, type ToolSchema } from "./tool.js";
-// Removed outputFile import if it was Playwright specific
-// import { outputFile } from "../config.js";
 import type { Context, ToolActionResult } from "../context.js"; // Assuming Context provides callBrowserbaseTool
 import type { Page, Locator, FrameLocator } from "playwright-core"; // <-- ADDED Import Page and Locator
 import { PageSnapshot } from "../pageSnapshot.js"; // Adjust path if needed
-import { Writable } from 'stream'; // Import Writable for process.stderr
+import { Writable } from "stream"; // Import Writable for process.stderr
 // Assuming this utility exists
 // Removed outputFile import as it's likely not used now
+import { outputFile } from '../config.js'; // Import outputFile
 
 // --- Tool: Snapshot ---
 const SnapshotInputSchema = z.object({});
@@ -45,24 +44,31 @@ const snapshot = defineTool<typeof SnapshotInputSchema>({
     inputSchema: SnapshotInputSchema,
   },
 
-  handle: async (context: Context, params: SnapshotInput): Promise<ToolResult> => {
+  handle: async (
+    context: Context,
+    params: SnapshotInput
+  ): Promise<ToolResult> => {
     const action = async (): Promise<ToolActionResult> => {
-        return { content: [{ type: 'text', text: 'Snapshot requested.' }] };
+      return { content: [{ type: "text", text: "Snapshot requested." }] };
     };
     return {
       action,
       code: [`// Request accessibility snapshot capture`],
       captureSnapshot: true,
       waitForNetwork: false,
-      resultOverride: { content: [{ type: 'text', text: 'Snapshot capture requested.' }] }
+      resultOverride: {
+        content: [{ type: "text", text: "Snapshot capture requested." }],
+      },
     };
   },
 });
 
 // --- Element Schema & Types ---
 const elementSchema = z.object({
-  element: z.string().describe('Human-readable element description'),
-  ref: z.string().describe('Exact target element reference from the page snapshot'),
+  element: z.string().describe("Human-readable element description"),
+  ref: z
+    .string()
+    .describe("Exact target element reference from the page snapshot"),
 });
 type ElementInput = z.infer<typeof elementSchema>;
 
@@ -71,49 +77,38 @@ type ElementInput = z.infer<typeof elementSchema>;
 
 // --- Tool: Click (Adapted Handle, Example Action) ---
 const click = defineTool({
-  capability: 'core',
+  capability: "core",
   schema: {
-    name: 'browserbase_click',
-    description: 'Perform click on a web page using ref',
+    name: "browserbase_click",
+    description: "Perform click on a web page using ref",
     inputSchema: elementSchema,
   },
-  handle: async (context: Context, params: ElementInput): Promise<ToolResult> => {
-    // Get the snapshot that's current *at the beginning* of this handle function.
-    // This might be the one implicitly captured right before the handle was called.
-    const snapshotForRef = context.snapshotOrDie();
-    const locator = await getLocator(context, params.ref, params.element, snapshotForRef);
-    const locatorStringForError = `locator for '${params.element}' (source: '${params.ref}')`;
+  handle: async (
+    context: Context,
+    params: ElementInput
+  ): Promise<ToolResult> => {
+    // Get locator directly from snapshot
+    const snapshot = context.snapshotOrDie();
+    const locator = snapshot.refLocator(params.ref);
 
     const code = [
-      `// Click ${params.element} (selector/ref: ${params.ref})`,
-      `// await page.locator('${params.ref.replace(/'/g, "\\'")}').click();`
+      `// Click ${params.element}`,
+      // Use generateLocator for code string
+      `// await page.${await generateLocator(locator)}.click();`,
     ];
 
     const action = async (): Promise<ToolActionResult> => {
       try {
-        const actionLogPrefix = `[browserbase_click action] ${new Date().toISOString()}:`;
-        const targetLocator = locator.first();
-        // process.stderr.write(`${actionLogPrefix} Using .first() on ${locatorStringForError}\\n`);
-
-        // process.stderr.write(`${actionLogPrefix} Explicitly waiting for locator.first() to be visible (max 20s)...\\n`);
-        await targetLocator.waitFor({ state: 'visible', timeout: 5000 });
-        // process.stderr.write(`${actionLogPrefix} locator.first() is visible.\\n`);
-
-        // process.stderr.write(`${actionLogPrefix} Checking if locator.first() is enabled...\\n`);
-        if (!await targetLocator.isEnabled({ timeout: 2000 })) {
-            // process.stderr.write(`${actionLogPrefix} ERROR - Element '${params.element}' (${locatorStringForError}) was visible but not enabled.\\n`);
-            throw new Error(`Element '${params.element}' (${locatorStringForError}) was visible but not enabled.`);
-        }
-        // process.stderr.write(`${actionLogPrefix} locator.first() is enabled. Proceeding with click.\\n`);
-
-        await targetLocator.click({ timeout: 30000 });
+        // Use the locator directly for the action
+        await locator.click({ force: true, timeout: 30000 }); // Increased timeout like logs
       } catch (actionError) {
-        const errorMessage = actionError instanceof Error ? actionError.message : String(actionError);
-        const actionLogPrefix = `[browserbase_click action Error] ${new Date().toISOString()}:`;
-        // process.stderr.write(`${actionLogPrefix} Raw action error: ${actionError}\\n`);
-        // process.stderr.write(`${actionLogPrefix} Click sequence failed for ${locatorStringForError}: ${errorMessage}\\n`);
-        // process.stderr.write(`${actionLogPrefix} Error Stack: ${actionError instanceof Error ? actionError.stack : 'N/A'}\\n`);
-        throw new Error(`Failed to click element '${params.element}'. Error: ${errorMessage}`);
+        const errorMessage =
+          actionError instanceof Error
+            ? actionError.message
+            : String(actionError);
+        throw new Error(
+          `Failed to click element '${params.element}'. Error: ${errorMessage}`
+        );
       }
       return {
         content: [{ type: "text", text: `Clicked ${params.element}` }],
@@ -131,420 +126,352 @@ const click = defineTool({
 
 // --- Tool: Drag (Adapted Handle, Example Action) ---
 const dragInputSchema = z.object({
-    startElement: z.string().describe('Source element description'),
-    startRef: z.string().describe('Exact source element reference from the page snapshot'),
-    endElement: z.string().describe('Target element description'),
-    endRef: z.string().describe('Exact target element reference from the page snapshot'),
-  });
+  startElement: z.string().describe("Source element description"),
+  startRef: z
+    .string()
+    .describe("Exact source element reference from the page snapshot"),
+  endElement: z.string().describe("Target element description"),
+  endRef: z
+    .string()
+    .describe("Exact target element reference from the page snapshot"),
+});
 type DragInput = z.infer<typeof dragInputSchema>;
 
 const drag = defineTool<typeof dragInputSchema>({
-    capability: "core",
-    schema: {
-        name: "browserbase_drag",
-        description: "Perform drag and drop between two elements using ref.",
-        inputSchema: dragInputSchema,
-    },
-    handle: async (context: Context, params: DragInput): Promise<ToolResult> => {
-        // Get the snapshot that's current *at the beginning* of this handle function.
-        const snapshotForRef = context.snapshotOrDie();
-        const startLocator = await getLocator(context, params.startRef, params.startElement, snapshotForRef);
-        const endLocator = await getLocator(context, params.endRef, params.endElement, snapshotForRef);
-        const startLocatorString = `start locator for '${params.startElement}' (source: '${params.startRef}')`;
-        const endLocatorString = `end locator for '${params.endElement}' (source: '${params.endRef}')`;
+  capability: "core",
+  schema: {
+    name: "browserbase_drag",
+    description: "Perform drag and drop between two elements using ref.",
+    inputSchema: dragInputSchema,
+  },
+  handle: async (context: Context, params: DragInput): Promise<ToolResult> => {
+    // Get locators directly from snapshot
+    const snapshot = context.snapshotOrDie();
+    const startLocator = snapshot.refLocator(params.startRef);
+    const endLocator = snapshot.refLocator(params.endRef);
 
-        const code = [
-            `// Drag ${params.startElement} to ${params.endElement} (selectors/refs: ${params.startRef} -> ${params.endRef})`,
-            `// await page.locator('${params.startRef.replace(/'/g, "\\'")}').dragTo(page.locator('${params.endRef.replace(/'/g, "\\'")}'));`
-        ];
+    const code = [
+      `// Drag ${params.startElement} to ${params.endElement}`,
+      // Use generateLocator for code string
+      `// await page.${await generateLocator(startLocator)}.dragTo(page.${await generateLocator(endLocator)});`,
+    ];
 
-        const action = async (): Promise<ToolActionResult> => {
-            try {
-                const actionLogPrefix = `[browserbase_drag action] ${new Date().toISOString()}:`;
-                const targetStartLocator = startLocator.first();
-                const targetEndLocator = endLocator.first();
-                // process.stderr.write(`${actionLogPrefix} Using .first() on ${startLocatorString} and ${endLocatorString}\\n`);
+    const action = async (): Promise<ToolActionResult> => {
+      try {
+        // Use locators directly for the action
+        await startLocator.dragTo(endLocator, { timeout: 5000 });
+      } catch (dragError) {
+        const errorMsg =
+          dragError instanceof Error ? dragError.message : String(dragError);
+        throw new Error(
+          `Failed to drag '${params.startElement}' to '${params.endElement}'. Error: ${errorMsg}`
+        );
+      }
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Dragged ${params.startElement} to ${params.endElement}`,
+          },
+        ],
+      };
+    };
 
-                // process.stderr.write(`${actionLogPrefix} Waiting for start/end elements.first() to be visible...\\n`);
-                await targetStartLocator.waitFor({ state: 'visible', timeout: 5000 });
-                await targetEndLocator.waitFor({ state: 'visible', timeout: 5000 });
-
-                // process.stderr.write(`${actionLogPrefix} Dragging...\\n`);
-                await targetStartLocator.dragTo(targetEndLocator, { timeout: 30000 });
-            } catch (dragError) {
-                const errorMsg = dragError instanceof Error ? dragError.message : String(dragError);
-                const actionLogPrefix = `[browserbase_drag action Error] ${new Date().toISOString()}:`;
-                // process.stderr.write(`${actionLogPrefix} Raw drag error: ${dragError}\\n`);
-                // process.stderr.write(`${actionLogPrefix} Drag failed using ${startLocatorString} -> ${endLocatorString}: ${errorMsg}\\n`);
-                // process.stderr.write(`${actionLogPrefix} Error Stack: ${dragError instanceof Error ? dragError.stack : 'N/A'}\\n`);
-                throw new Error(`Failed to drag '${params.startElement}' to '${params.endElement}'. Error: ${errorMsg}`);
-            }
-            return {
-                content: [{ type: "text", text: `Dragged ${params.startElement} to ${params.endElement}` }],
-            };
-        };
-
-        return { action, code, captureSnapshot: true, waitForNetwork: true };
-    },
+    return { action, code, captureSnapshot: true, waitForNetwork: true };
+  },
 });
 
 // --- Tool: Hover (Adapted Handle, Example Action) ---
 const hover = defineTool<typeof elementSchema>({
-    capability: "core",
-    schema: {
-        name: "browserbase_hover",
-        description: "Hover over element on page using ref.",
-        inputSchema: elementSchema,
-    },
-    handle: async (context: Context, params: ElementInput): Promise<ToolResult> => {
-        // Get the snapshot that's current *at the beginning* of this handle function.
-        const snapshotForRef = context.snapshotOrDie();
-        const locator = await getLocator(context, params.ref, params.element, snapshotForRef);
-        const locatorStringForError = `locator for '${params.element}' (source: '${params.ref}')`;
+  capability: "core",
+  schema: {
+    name: "browserbase_hover",
+    description: "Hover over element on page using ref.",
+    inputSchema: elementSchema,
+  },
+  handle: async (
+    context: Context,
+    params: ElementInput
+  ): Promise<ToolResult> => {
+    // Get locator directly from snapshot
+    const snapshot = context.snapshotOrDie();
+    const locator = snapshot.refLocator(params.ref);
 
-        const code = [
-            `// Hover over ${params.element} (selector/ref: ${params.ref})`,
-            `// await page.locator('${params.ref.replace(/'/g, "\\'")}').hover();`
-        ];
+    const code = [
+      `// Hover over ${params.element}`,
+      // Use generateLocator for code string
+      `// await page.${await generateLocator(locator)}.hover();`,
+    ];
 
-        const action = async (): Promise<ToolActionResult> => {
-            try {
-                const actionLogPrefix = `[browserbase_hover action] ${new Date().toISOString()}:`;
-                const targetLocator = locator.first();
-                // process.stderr.write(`${actionLogPrefix} Using .first() on ${locatorStringForError} for hover\\n`);
+    const action = async (): Promise<ToolActionResult> => {
+      try {
+        // Use locator directly for the action
+        await locator.hover({ timeout: 5000 });
+      } catch (hoverError) {
+        const errorMsg =
+          hoverError instanceof Error ? hoverError.message : String(hoverError);
+        throw new Error(
+          `Failed to hover over element '${params.element}'. Error: ${errorMsg}`
+        );
+      }
+      return {
+        content: [{ type: "text", text: `Hovered over: ${params.element}` }],
+      };
+    };
 
-                // process.stderr.write(`${actionLogPrefix} Waiting for locator.first() to be visible...\\n`);
-                await targetLocator.waitFor({ state: 'visible', timeout: 5000 });
-
-                // process.stderr.write(`${actionLogPrefix} Hovering over locator.first() ${locatorStringForError}...\\n`);
-                await targetLocator.hover({ timeout: 30000 });
-            } catch (hoverError) {
-                const errorMsg = hoverError instanceof Error ? hoverError.message : String(hoverError);
-                const actionLogPrefix = `[browserbase_hover action Error] ${new Date().toISOString()}:`;
-                // process.stderr.write(`${actionLogPrefix} Raw hover error: ${hoverError}\\n`);
-                // process.stderr.write(`${actionLogPrefix} Hover failed for ${locatorStringForError}: ${errorMsg}\\n`);
-                // process.stderr.write(`${actionLogPrefix} Error Stack: ${hoverError instanceof Error ? hoverError.stack : 'N/A'}\\n`);
-                throw new Error(`Failed to hover over element '${params.element}'. Error: ${errorMsg}`);
-            }
-            return {
-                content: [{ type: "text", text: `Hovered over: ${params.element}` }],
-            };
-        };
-
-        return { action, code, captureSnapshot: true, waitForNetwork: true };
-    },
+    return { action, code, captureSnapshot: true, waitForNetwork: true };
+  },
 });
 
 // --- Tool: Type (Adapted Handle, Example Action) ---
 const typeSchema = elementSchema.extend({
-  text: z.string().describe('Text to type into the element'),
-  submit: z.boolean().optional().describe('Whether to submit entered text (press Enter after)'),
-  slowly: z.boolean().optional().describe('Whether to type one character at a time.'),
+  text: z.string().describe("Text to type into the element"),
+  submit: z
+    .boolean()
+    .optional()
+    .describe("Whether to submit entered text (press Enter after)"),
+  slowly: z
+    .boolean()
+    .optional()
+    .describe("Whether to type one character at a time."),
 });
 type TypeInput = z.infer<typeof typeSchema>;
 
 const type = defineTool<typeof typeSchema>({
-    capability: "core",
-    schema: {
-        name: "browserbase_type",
-        description: "Type text into editable element using ref.",
-        inputSchema: typeSchema,
-    },
-    handle: async (context: Context, params: TypeInput): Promise<ToolResult> => {
-        // Get the snapshot that's current *at the beginning* of this handle function.
-        const snapshotForRef = context.snapshotOrDie();
-        const locator = await getLocator(context, params.ref, params.element, snapshotForRef);
-        const locatorStringForError = `locator for '${params.element}' (source: '${params.ref}')`;
+  capability: "core",
+  schema: {
+    name: "browserbase_type",
+    description: "Type text into editable element using ref.",
+    inputSchema: typeSchema,
+  },
+  handle: async (context: Context, params: TypeInput): Promise<ToolResult> => {
+    // Get locator directly from snapshot
+    const snapshot = context.snapshotOrDie();
+    const locator = snapshot.refLocator(params.ref);
 
-        const code: string[] = [];
-        const steps: (() => Promise<void>)[] = [];
-        if (params.slowly) {
-            code.push(`// Press "${params.text}" sequentially into "${params.element}" (selector/ref: ${params.ref})`);
-            steps.push(() => locator.first().pressSequentially(params.text, { delay: 100, timeout: 30000 }));
-        } else {
-            code.push(`// Fill "${params.text}" into "${params.element}" (selector/ref: ${params.ref})`);
-            steps.push(() => locator.first().fill(params.text, { timeout: 30000 }));
-        }
-        if (params.submit) {
-            code.push(`// Submit text (press Enter)`);
-            steps.push(() => locator.first().press('Enter', { timeout: 10000 }));
-        }
+    const code: string[] = [];
+    const steps: (() => Promise<void>)[] = [];
 
-        const action = async (): Promise<ToolActionResult> => {
-            try {
-                const actionLogPrefix = `[browserbase_type action] ${new Date().toISOString()}:`;
-                const targetLocator = locator.first();
-                // process.stderr.write(`${actionLogPrefix} Using .first() on ${locatorStringForError} for type/press\\n`);
+    if (params.slowly) {
+      code.push(`// Press "${params.text}" sequentially into "${params.element}"`);
+      code.push(`// await page.${await generateLocator(locator)}.pressSequentially('${params.text.replace(/'/g, "\\'")}');`);
+      steps.push(() => locator.pressSequentially(params.text, { delay: 100, timeout: 5000 }));
+    } else {
+       code.push(`// Fill "${params.text}" into "${params.element}"`);
+       code.push(`// await page.${await generateLocator(locator)}.fill('${params.text.replace(/'/g, "\\'")}');`);
+       steps.push(async () => {
+         await locator.waitFor({ state: "visible", timeout: 5000 });
+         if (!(await locator.isEditable({ timeout: 2000 }))) {
+            throw new Error(`Element '${params.element}' was visible but not editable.`);
+         }
+         await locator.fill("", { force: true, timeout: 5000 }); // Force empty fill first
+         await locator.fill(params.text, { force: true, timeout: 5000 }); // Force fill with text
+       });
+    }
 
-                // process.stderr.write(`${actionLogPrefix} Waiting for locator.first() to be visible...\\n`);
-                await targetLocator.waitFor({ state: 'visible', timeout: 5000 });
+    if (params.submit) {
+      code.push(`// Submit text`);
+      code.push(`// await page.${await generateLocator(locator)}.press('Enter');`);
+      steps.push(() => locator.press("Enter", { timeout: 5000 }));
+    }
 
-                // process.stderr.write(`${actionLogPrefix} Checking if locator.first() is editable...\\n`);
-                if (!await targetLocator.isEditable({ timeout: 2000 })) {
-                    // process.stderr.write(`${actionLogPrefix} ERROR - Locator ${locatorStringForError} is not editable.\\n`);
-                    throw new Error(`Element '${params.element}' (${locatorStringForError}) was visible but not editable.`);
-                }
+    const action = async (): Promise<ToolActionResult> => {
+      try {
+        // Execute the steps sequentially
+        await steps.reduce((acc, step) => acc.then(step), Promise.resolve());
+      } catch (typeError) {
+        const errorMsg =
+          typeError instanceof Error ? typeError.message : String(typeError);
+        throw new Error(
+          `Failed to type into or submit element '${params.element}'. Error: ${errorMsg}`
+        );
+      }
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Typed "${params.text}" into: ${params.element}${params.submit ? " and submitted" : ""}`,
+          },
+        ],
+      };
+    };
 
-                // process.stderr.write(`${actionLogPrefix} Executing type sequence for locator.first() ${locatorStringForError}...\\n`);
-                await steps.reduce((acc, step) => acc.then(step), Promise.resolve());
-            } catch (typeError) {
-                 const errorMsg = typeError instanceof Error ? typeError.message : String(typeError);
-                 const actionLogPrefix = `[browserbase_type action Error] ${new Date().toISOString()}:`;
-                 // process.stderr.write(`${actionLogPrefix} Raw type/press error: ${typeError}\\n`);
-                 // process.stderr.write(`${actionLogPrefix} Type/press failed for ${locatorStringForError}: ${errorMsg}\\n`);
-                 // process.stderr.write(`${actionLogPrefix} Error Stack: ${typeError instanceof Error ? typeError.stack : 'N/A'}\\n`);
-                 throw new Error(`Failed to type into or submit element '${params.element}'. Error: ${errorMsg}`);
-            }
-            return {
-                content: [{ type: "text", text: `Typed "${params.text}" into: ${params.element}${params.submit ? " and submitted" : ""}` }],
-            };
-        };
-
-        return { action, code, captureSnapshot: true, waitForNetwork: true };
-    },
+    return { action, code, captureSnapshot: true, waitForNetwork: true };
+  },
 });
 
 // --- Tool: Select Option (Adapted Handle, Example Action) ---
 const selectOptionSchema = elementSchema.extend({
-  values: z.array(z.string()).describe('Array of values to select in the dropdown.'),
+  values: z
+    .array(z.string())
+    .describe("Array of values to select in the dropdown."),
 });
 type SelectOptionInput = z.infer<typeof selectOptionSchema>;
 
 const selectOption = defineTool<typeof selectOptionSchema>({
-    capability: "core",
-    schema: {
-        name: "browserbase_select_option",
-        description: "Select an option in a dropdown using ref.",
-        inputSchema: selectOptionSchema,
-    },
-    handle: async (context: Context, params: SelectOptionInput): Promise<ToolResult> => {
-        // Get the snapshot that's current *at the beginning* of this handle function.
-        const snapshotForRef = context.snapshotOrDie();
-        const locator = await getLocator(context, params.ref, params.element, snapshotForRef);
-        const locatorStringForError = `locator for '${params.element}' (source: '${params.ref}')`;
+  capability: "core",
+  schema: {
+    name: "browserbase_select_option",
+    description: "Select an option in a dropdown using ref.",
+    inputSchema: selectOptionSchema,
+  },
+  handle: async (
+    context: Context,
+    params: SelectOptionInput
+  ): Promise<ToolResult> => {
+    // Get locator directly from snapshot
+    const snapshot = context.snapshotOrDie();
+    const locator = snapshot.refLocator(params.ref);
 
-        const code = [
-            `// Select options [${params.values.join(', ')}] in ${params.element} (selector/ref: ${params.ref})`,
-            `// await page.locator(...).selectOption(...)`
-        ];
+    const code = [
+      `// Select options [${params.values.join(", ")}] in ${params.element}`,
+      // Remove javascript.formatObject, use simple JSON.stringify for code comment
+      `// await page.${await generateLocator(locator)}.selectOption(${JSON.stringify(params.values)});`,
+    ];
 
-        const action = async (): Promise<ToolActionResult> => {
-            try {
-                const actionLogPrefix = `[browserbase_select_option action] ${new Date().toISOString()}:`;
-                const targetLocator = locator.first();
-                // process.stderr.write(`${actionLogPrefix} Using .first() on ${locatorStringForError} for selectOption\\n`);
+    const action = async (): Promise<ToolActionResult> => {
+      try {
+         // Use locator directly for the action
+        await locator.waitFor({ state: "visible", timeout: 5000 });
+        await locator.selectOption(params.values, { timeout: 5000 });
+      } catch (selectError) {
+        const errorMsg =
+          selectError instanceof Error
+            ? selectError.message
+            : String(selectError);
+        throw new Error(
+          `Failed to select option(s) in element '${params.element}'. Error: ${errorMsg}`
+        );
+      }
+      return {
+        content: [
+          { type: "text", text: `Selected options in: ${params.element}` },
+        ],
+      };
+    };
 
-                // process.stderr.write(`${actionLogPrefix} Waiting for locator.first() to be visible...\\n`);
-                await targetLocator.waitFor({ state: 'visible', timeout: 5000 });
-
-                // process.stderr.write(`${actionLogPrefix} Selecting options in locator.first() ${locatorStringForError}...\\n`);
-                await targetLocator.selectOption(params.values, { timeout: 5000 });
-            } catch (selectError) {
-                 const errorMsg = selectError instanceof Error ? selectError.message : String(selectError);
-                 const actionLogPrefix = `[browserbase_select_option action Error] ${new Date().toISOString()}:`;
-                 // process.stderr.write(`${actionLogPrefix} Raw selectOption error: ${selectError}\\n`);
-                 // process.stderr.write(`${actionLogPrefix} SelectOption failed for ${locatorStringForError}: ${errorMsg}\\n`);
-                 // process.stderr.write(`${actionLogPrefix} Error Stack: ${selectError instanceof Error ? selectError.stack : 'N/A'}\\n`);
-                 throw new Error(`Failed to select option(s) in element '${params.element}'. Error: ${errorMsg}`);
-            }
-            return {
-                content: [{ type: "text", text: `Selected options in: ${params.element}` }],
-            };
-        };
-
-        return { action, code, captureSnapshot: true, waitForNetwork: true };
-    },
+    return { action, code, captureSnapshot: true, waitForNetwork: true };
+  },
 });
 
 // --- Tool: Screenshot (Adapted Handle, Example Action) ---
-const screenshotSchema = z.object({
-  raw: z.boolean().optional().describe('Whether to return without compression (PNG). Default is false (JPEG).'),
-  element: z.string().optional().describe('Human-readable element description.'),
-  ref: z.string().optional().describe('Exact target element reference from the page snapshot.'),
-}).refine(data => !!data.element === !!data.ref, {
-  message: 'Both element and ref must be provided or neither.',
-  path: ['ref', 'element']
-});
+const screenshotSchema = z
+  .object({
+    raw: z
+      .boolean()
+      .optional()
+      .describe(
+        "Whether to return without compression (PNG). Default is false (JPEG)."
+      ),
+    element: z
+      .string()
+      .optional()
+      .describe("Human-readable element description."),
+    ref: z
+      .string()
+      .optional()
+      .describe("Exact target element reference from the page snapshot."),
+  })
+  .refine((data) => !!data.element === !!data.ref, {
+    message: "Both element and ref must be provided or neither.",
+    path: ["ref", "element"],
+  });
 type ScreenshotInput = z.infer<typeof screenshotSchema>;
 
 const screenshot = defineTool<typeof screenshotSchema>({
-    capability: "core",
-    schema: {
-        name: "browserbase_take_screenshot",
-        description:
-        `Take a screenshot of the current page or element using ref.`,
-        inputSchema: screenshotSchema,
-    },
-    handle: async (context: Context, params: ScreenshotInput): Promise<ToolResult> => {
-        const page = await context.getActivePage();
-        if (!page) throw new Error("No active page found for screenshot");
+  capability: "core",
+  schema: {
+    name: "browserbase_take_screenshot",
+    description: `Take a screenshot of the current page or element using ref.`,
+    inputSchema: screenshotSchema,
+  },
+  handle: async (
+    context: Context,
+    params: ScreenshotInput
+  ): Promise<ToolResult> => {
+    const page = await context.getActivePage();
+    if (!page) throw new Error("No active page found for screenshot");
 
-        const format = params.raw ? "png" : "jpeg";
-        const screenshotOptions: Parameters<Page['screenshot']>[0] = {
-            type: format,
-            quality: format === 'png' ? undefined : 50,
-            scale: 'css',
-            timeout: 15000,
-        };
+    const format = params.raw ? "png" : "jpeg";
+    const name = `screenshot-${Date.now()}.${format}`;
+    const isElementScreenshot = params.element && params.ref;
+    const snapshot = context.snapshotOrDie();
+    const locator = params.ref ? snapshot.refLocator(params.ref) : null;
 
-        let code: string[] = [];
-        let targetLocator: Locator | null = null;
+    // Revert to using outputFile with context['config'] as a workaround
+    // NOTE: This might fail if config is truly private at runtime.
+    // You should add a public method like getOutputPath to Context.
+    const outputPath = await outputFile((context as any)['config'], name);
 
-        if (params.ref && params.element) {
-            // Get the snapshot that's current *at the beginning* of this handle function.
-            const snapshotForRef = context.snapshotOrDie();
-            targetLocator = await getLocator(context, params.ref, params.element, snapshotForRef);
-            code.push(`// Screenshot element ${params.element} (selector/ref: ${params.ref})`);
-        } else {
-            code.push(`// Screenshot viewport`);
-        }
+    const screenshotOptions: Parameters<Page["screenshot"]>[0] = {
+      type: format,
+      quality: format === "png" ? undefined : 50,
+      scale: "css",
+      timeout: 15000,
+      path: outputPath // Use obtained path
+    };
 
-        const action = async (): Promise<ToolActionResult> => {
-            let buffer: Buffer;
-            const currentScreenshotOptions: typeof screenshotOptions = { ...screenshotOptions };
-            const actionLogPrefix = `[browserbase_take_screenshot action] ${new Date().toISOString()}:`;
+    let code: string[] = [];
+    code.push(`// Screenshot ${isElementScreenshot ? params.element : 'viewport'} and save it as ${screenshotOptions.path}`);
+    const optionsString = JSON.stringify(screenshotOptions).replace(/"/g, '\"');
+    if (locator)
+      code.push(`// await page.${await generateLocator(locator)}.screenshot(${optionsString});`);
+    else
+      code.push(`// await page.screenshot(${optionsString});`);
 
-            try {
-                if (targetLocator) {
-                    try {
-                         // process.stderr.write(`${actionLogPrefix} Getting bounding box for element locator (source: '${params.ref}')...\\n`);
-                         const targetElement = targetLocator.first();
-                         const boundingBox = await targetElement.boundingBox({ timeout: 5000 });
-                         if (boundingBox) {
-                              // process.stderr.write(`${actionLogPrefix} Taking clipped page screenshot for element.\\n`);
-                              currentScreenshotOptions.clip = boundingBox;
-                              buffer = await page.screenshot(currentScreenshotOptions);
-                         } else {
-                              // process.stderr.write(`${actionLogPrefix} WARN - Could not get bounding box for element. Taking viewport screenshot instead.\\n`);
-                              buffer = await page.screenshot(currentScreenshotOptions);
-                         }
-                    } catch (boundingBoxError) {
-                         const errorMsg = boundingBoxError instanceof Error ? boundingBoxError.message : String(boundingBoxError);
-                         // process.stderr.write(`${actionLogPrefix} Raw boundingBox error: ${boundingBoxError}\\n`);
-                         // process.stderr.write(`${actionLogPrefix} WARN - Error getting bounding box for element (source: '${params.ref}'): ${errorMsg}. Taking viewport screenshot instead.\\n`);
-                         buffer = await page.screenshot(currentScreenshotOptions);
-                    }
-                } else {
-                    // process.stderr.write(`${actionLogPrefix} Taking viewport screenshot.\\n`);
-                    buffer = await page.screenshot(currentScreenshotOptions);
-                }
-            } catch (screenshotError) {
-                const errorMsg = screenshotError instanceof Error ? screenshotError.message : String(screenshotError);
-                // process.stderr.write(`${actionLogPrefix} Raw screenshot error: ${screenshotError}\\n`);
-                // process.stderr.write(`${actionLogPrefix} Screenshot failed: ${errorMsg}\\n`);
-                // process.stderr.write(`${actionLogPrefix} Screenshot Error Stack: ${screenshotError instanceof Error ? screenshotError.stack : 'N/A'}\\n`);
-                throw new Error(`Failed to take screenshot. Error: ${errorMsg}`);
-            }
+    const action = async (): Promise<ToolActionResult> => {
+      let buffer: Buffer;
+      const actionLogPrefix = `[browserbase_take_screenshot action] ${new Date().toISOString()}:`;
 
-            const base64 = buffer.toString("base64");
-            const name = `screenshot-${Date.now()}.${format}`;
-            context.addScreenshot(name, format, base64);
+      try {
+        // Use locator directly for action
+        buffer = locator ? await locator.screenshot(screenshotOptions) : await page.screenshot(screenshotOptions);
 
-            const imageContent: ImageContent = {
-                type: "image",
-                format: format,
-                mimeType: `image/${format}`,
-                data: "",
-                detail: "low",
-                uri: `mcp://screenshots/${name}`,
-            };
+      } catch (screenshotError) {
+         // Keep existing error handling
+        const errorMsg =
+          screenshotError instanceof Error
+            ? screenshotError.message
+            : String(screenshotError);
+        throw new Error(`Failed to take screenshot. Error: ${errorMsg}`);
+      }
 
-            return {
-                content: [
-                    { type: "text", text: `Screenshot taken${params.element ? ": " + params.element : " (viewport)"} and saved as resource '${name}'.` },
-                    imageContent,
-                ],
-            };
-        };
+      const base64 = buffer.toString("base64");
+      context.addScreenshot(name, format, base64);
 
-        return { action, code, captureSnapshot: false, waitForNetwork: false };
-    },
+      const imageContent: ImageContent = {
+        type: "image",
+        format: format,
+        mimeType: `image/${format}`,
+        data: "",
+        detail: "low",
+        uri: `mcp://screenshots/${name}`,
+      };
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Screenshot taken${params.element ? ": " + params.element : " (viewport)"} and saved as resource '${name}'.`,
+          },
+          imageContent,
+        ],
+      };
+    };
+
+    return { action, code, captureSnapshot: false, waitForNetwork: false };
+  },
 });
 
 // Ensure all defined tools are exported
-// --- Add generateLocator function ---
-// This function needs refinement. Playwright's internal _generateLocatorString is ideal
-// but might not be stable or available. Using toString() and regex is a fallback.
-// We might need a more robust way provided by the Context/Snapshot potentially.
+// --- Replace generateLocator function with Playwright MCP version ---
 export async function generateLocator(locator: Locator): Promise<string> {
-    // Prefer Playwright's internal method if available (requires check/cast)
-    if ((locator as any)._generateLocatorString) {
-        try {
-             return await (locator as any)._generateLocatorString();
-        } catch (e) {
-            console.warn("Failed to use _generateLocatorString:", e);
-        }
-    }
-
-    // Fallback based on toString() - less reliable
-    console.warn("Falling back to locator.toString() for code generation. This might be inaccurate.");
-    const locatorString = locator.toString();
-    // Example: Playwright.Locator@frameLocator('iframe[name="preview"]').getByRole('button', { name: 'Submit' })
-    // Example: Playwright.Locator@[aria-ref="f1abc"]
-    // Try to extract the core selector part
-    const toStringMatch = locatorString.match(/^.*Locator@(.*)$/);
-    if (toStringMatch && toStringMatch[1]) {
-        // Basic sanitization: wrap in locator() if it doesn't look like a frameLocator call
-         if (toStringMatch[1].startsWith('frameLocator')) {
-            return toStringMatch[1]; // Assume it's already a valid chain start
-         } else {
-             // Attempt to quote appropriately if it looks like a simple selector
-             // This is highly heuristic!
-              if (/^[a-zA-Z0-9#\.>\s\\[\\]\"\'=-]+$/.test(toStringMatch[1])) {
-                 return `locator(${JSON.stringify(toStringMatch[1])})`;
-              } else {
-                  // Fallback for complex chains derived from toString()
-                  return toStringMatch[1];
-              }
-         }
-    }
-
-    // Ultimate fallback if toString() is weird
-    console.error("Ultimate fallback for generateLocator: Cannot determine selector from:", locatorString);
-    return `locator('UNKNOWN_SELECTOR_FROM_SNAPSHOT')`;
+  // Use Playwright's internal method (requires cast)
+  return (locator as any)._generateLocatorString();
 }
 
-// Ensure all defined tools are exported
-export default [
-  snapshot,
-  click,
-  drag,
-  hover,
-  type,
-  selectOption,
-  screenshot,
-];
+export default [snapshot, click, drag, hover, type, selectOption, screenshot];
 
-// ---> HELPER FUNCTION START <---
-async function getLocator(context: Context, ref: string, elementDescription: string, snapshotToUse?: PageSnapshot): Promise<Locator> {
-    const logPrefix = `[getLocator] ${new Date().toISOString()}:`;
-    // const snapshotRefPattern = /^s\d+e\d+$/; // Removed pattern check
-
-    // process.stderr.write(`${logPrefix} Testing ref: '${ref}' against pattern ${snapshotRefPattern}\n`); // Removed log
-
-    // Removed the entire if/else block that checked snapshotRefPattern
-
-    // Always treat ref as a direct selector (CSS, XPath, etc.)
-    // process.stderr.write(`${logPrefix} Using page.locator directly for element '${elementDescription}' with selector '${ref}'.\n`); // Adjusted log
-    const page = await context.getActivePage();
-    if (!page) {
-        throw new Error(`Cannot locate element "${elementDescription}" using selector "${ref}": No active page found.`);
-    }
-    try {
-        // Return the locator directly. The action handler will wait for it.
-        const locator = page.locator(ref);
-        // Optional: Minimal check just for logging, doesn't affect return
-        // if (await locator.count() > 0) {
-        //      // process.stderr.write(`${logPrefix} page.locator('${ref}') initially found > 0 elements.\n`);
-        // } else {
-        //      // process.stderr.write(`${logPrefix} page.locator('${ref}') initially found 0 elements. Action will wait.\n`);
-        // }
-        return locator;
-    } catch (e) {
-         const errorMsg = e instanceof Error ? e.message : String(e);
-         // process.stderr.write(`${logPrefix} Error using page.locator('${ref}'): ${errorMsg}.\n`);
-         // Throw a more specific error indicating the selector failed
-         throw new Error(`Failed to locate element "${elementDescription}" using selector "${ref}": ${errorMsg}`); // Adjusted error message
-    }
-}
-// ---> HELPER FUNCTION END <---
+// ---> DELETE HELPER FUNCTION START <---
+// Deleted the getLocator function
+// ---> DELETE HELPER FUNCTION END <---

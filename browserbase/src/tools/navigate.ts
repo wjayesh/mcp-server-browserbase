@@ -27,7 +27,7 @@ async function handleNavigate(context: Context, params: NavigateInput): Promise<
             throw new Error('No active page found for navigate');
         }
         try {
-            await page.goto(params.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            await page.goto(params.url, { waitUntil: 'domcontentloaded', timeout: 5000 });
             return { content: [{ type: 'text', text: `Navigated to ${params.url}` }] };
         } catch (error) {
             console.error(`Navigate action failed: ${error}`);

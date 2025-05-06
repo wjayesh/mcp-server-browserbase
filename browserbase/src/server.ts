@@ -126,7 +126,8 @@ export function createServer(serverOptions: BrowserbaseServerOptions, config: Co
       // Delegate execution to the context
       const result = await context.run(tool, request.params.arguments ?? {});
       // Log the successful result structure just before returning
-      process.stderr.write(`[server.ts Success] ${new Date().toISOString()} Returning result for ${request.params.name}: ${JSON.stringify(result)}\\n`);
+      // this just logs the result, not the error
+      // process.stderr.write(`[server.ts Success] ${new Date().toISOString()} Returning result for ${request.params.name}: ${JSON.stringify(result)}\\n`);
       return result;
     } catch (error) {
       // Use the explicit error logger
@@ -140,7 +141,7 @@ export function createServer(serverOptions: BrowserbaseServerOptions, config: Co
   // Wrap server close to also close context
   const originalClose = server.close.bind(server);
   server.close = async () => {
-    await context.close();
+    // await context.closeSession();
     await originalClose();
   };
   

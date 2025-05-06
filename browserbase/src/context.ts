@@ -16,18 +16,14 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { PageSnapshot } from "./pageSnapshot.js";
-import { Writable } from 'stream'; // Import Writable for process.stderr
-import type { Page } from "playwright"; // Import Page type
+import { Writable } from "stream"; // Import Writable for process.stderr
+import type { Page, Locator } from "playwright"; // Import Page and Locator types
 
 // Define ToolActionResult locally if not exported
 export type ToolActionResult =
   | { content?: (ImageContent | TextContent)[] }
   | undefined
   | void;
-
-const MAX_ACTION_ATTEMPTS = 3; // Number of times to attempt a ref-based action
-const RETRY_DELAY_MS = 500; // Delay between retries
-const EXPLICIT_WAIT_TIMEOUT_MS = 7000; // Timeout for explicit waits before actions
 
 /**
  * Manages the context for tool execution within a specific Browserbase session.
@@ -81,7 +77,9 @@ export class Context {
   snapshotOrDie(): PageSnapshot {
     const snapshot = this.latestSnapshots.get(this.currentSessionId);
     if (!snapshot) {
-        throw new Error(`No snapshot available for the current session (${this.currentSessionId}). Capture a snapshot first.`);
+      throw new Error(
+        `No snapshot available for the current session (${this.currentSessionId}). Capture a snapshot first.`
+      );
     }
     return snapshot;
   }
@@ -98,18 +96,20 @@ export class Context {
    * Returns the captured snapshot or undefined if capture failed.
    */
   async captureSnapshot(): Promise<PageSnapshot | undefined> {
-    const logPrefix = `[Context.captureSnapshot] ${new Date().toISOString()} Session ${this.currentSessionId}:`;
+    const logPrefix = `[Context.captureSnapshot] ${new Date().toISOString()} Session ${
+      this.currentSessionId
+    }:`;
     let page;
     try {
       page = await this.getActivePage();
     } catch (error) {
-        this.clearLatestSnapshot();
-        return undefined;
+      this.clearLatestSnapshot();
+      return undefined;
     }
 
     if (!page) {
-        this.clearLatestSnapshot();
-        return undefined;
+      this.clearLatestSnapshot();
+      return undefined;
     }
 
     try {
@@ -118,8 +118,13 @@ export class Context {
       this.latestSnapshots.set(this.currentSessionId, snapshot);
       return snapshot;
     } catch (error) {
-        this.clearLatestSnapshot();
-        return undefined;
+      process.stderr.write(
+        `${logPrefix} Failed to capture snapshot: ${
+          error instanceof Error ? error.message : String(error)
+        }\\n`
+      ); // Enhanced logging
+      this.clearLatestSnapshot();
+      return undefined;
     }
   }
 
@@ -170,40 +175,52 @@ export class Context {
   public async getActivePage(): Promise<BrowserSession["page"] | null> {
     const session = await getSession(this.currentSessionId, this.config);
     if (!session || !session.page || session.page.isClosed()) {
-       try {
-            // getSession does not support a refresh flag currently.
-            // If a session is invalid, it needs to be recreated or re-established upstream.
-            // For now, just return null if the fetched session is invalid.
-           const currentSession = await getSession(this.currentSessionId, this.config);
-           if (!currentSession || !currentSession.page || currentSession.page.isClosed()) {
-               return null;
-           }
-           return currentSession.page;
-       } catch (refreshError) {
-           return null;
-       }
+      try {
+        // getSession does not support a refresh flag currently.
+        // If a session is invalid, it needs to be recreated or re-established upstream.
+        // For now, just return null if the fetched session is invalid.
+        const currentSession = await getSession(
+          this.currentSessionId,
+          this.config
+        );
+        if (
+          !currentSession ||
+          !currentSession.page ||
+          currentSession.page.isClosed()
+        ) {
+          return null;
+        }
+        return currentSession.page;
+      } catch (refreshError) {
+        return null;
+      }
     }
     return session.page;
   }
 
-
   public async getActiveBrowser(): Promise<BrowserSession["browser"] | null> {
     const session = await getSession(this.currentSessionId, this.config);
     if (!session || !session.browser || !session.browser.isConnected()) {
-        try {
-            // getSession does not support a refresh flag currently.
-             const currentSession = await getSession(this.currentSessionId, this.config);
-            if (!currentSession || !currentSession.browser || !currentSession.browser.isConnected()) {
-                return null;
-            }
-            return currentSession.browser;
-        } catch (refreshError) {
-            return null;
+      try {
+        // getSession does not support a refresh flag currently.
+        const currentSession = await getSession(
+          this.currentSessionId,
+          this.config
+        );
+        if (
+          !currentSession ||
+          !currentSession.browser ||
+          !currentSession.browser.isConnected()
+        ) {
+          return null;
         }
+        return currentSession.browser;
+      } catch (refreshError) {
+        return null;
+      }
     }
     return session.browser;
   }
-
 
   public async waitForTimeout(timeoutMillis: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, timeoutMillis));
@@ -220,77 +237,131 @@ export class Context {
   private async executeRefAction(
     toolName: string,
     validatedArgs: any,
-    actionFn: (page: Page, ref: string | undefined, args: any) => Promise<ToolActionResult | void | string>, // ref can be undefined for non-ref actions handled here
-    requiresRef: boolean = true
+    actionFn: (
+      page: Page,
+      identifier: string | undefined,
+      args: any,
+      locator: Locator | undefined,
+      identifierType: "ref" | "selector" | "none"
+    ) => Promise<ToolActionResult | void | string>,
+    requiresIdentifier: boolean = true
   ): Promise<{ resultText: string; actionResult?: ToolActionResult | void }> {
     let lastError: Error | null = null;
     let page: Page | null = null;
     let actionResult: ToolActionResult | void | undefined;
     let resultText = "";
+    let identifier: string | undefined = undefined;
+    let identifierType: "ref" | "selector" | "none" = "none";
 
-    for (let attempt = 1; attempt <= MAX_ACTION_ATTEMPTS; attempt++) {
-      const logPrefix = `[Context.executeRefAction ${toolName} Att ${attempt}/${MAX_ACTION_ATTEMPTS}] ${new Date().toISOString()}:`;
-
-      try {
-        page = await this.getActivePage();
-        if (!page) {
-          throw new Error("Failed to get active page for action attempt.");
-        }
-
-        const snapshot = await this.captureSnapshot();
-        if (!snapshot && requiresRef) { // Only fail if snapshot is needed for ref-based ops
-            throw new Error("Failed to capture pre-action snapshot.");
-        }
-
-        const ref = validatedArgs?.ref;
-        if (requiresRef && !ref) {
-             throw new Error(`Missing required 'ref' argument for tool ${toolName}.`);
-        }
-
-         if (ref) { // Only perform waits if a ref is actually being used
-            const locator = page.locator(ref);
-            try {
-              // Wait only for visible. Playwright actions implicitly handle enabled checks.
-              await locator.waitFor({ state: 'visible', timeout: EXPLICIT_WAIT_TIMEOUT_MS });
-            } catch (waitError) {
-              throw new Error(`Element ${ref} was not visible within ${EXPLICIT_WAIT_TIMEOUT_MS}ms: ${waitError instanceof Error ? waitError.message : String(waitError)}`);
-            }
-         }
-
-        const actionFnResult = await actionFn(page, ref, validatedArgs);
-
-        if (typeof actionFnResult === 'string') {
-            resultText = actionFnResult;
-            actionResult = undefined;
-        } else {
-            actionResult = actionFnResult;
-             const content = actionResult?.content;
-             if (Array.isArray(content) && content.length > 0) {
-                  resultText = content.map((c: { type: string, text?: string }) => c.type === 'text' ? c.text : `[${c.type}]`).filter(Boolean).join(' ') || `${toolName} action completed.`;
-             } else {
-                resultText = `${toolName} action completed successfully.`;
-             }
-        }
-        lastError = null;
-        return { resultText, actionResult };
-
-      } catch (error: any) {
-        lastError = error;
-        if (attempt < MAX_ACTION_ATTEMPTS) {
-          await this.waitForTimeout(RETRY_DELAY_MS);
-        }
-      }
+    // --- Get page and snapshot BEFORE the loop ---
+    page = await this.getActivePage();
+    if (!page) {
+      throw new Error("Failed to get active page before action attempts.");
     }
 
-    throw lastError ?? new Error(`Action ${toolName} failed after ${MAX_ACTION_ATTEMPTS} attempts.`);
-  }
+    // Get the CURRENT latest snapshot - DO NOT capture a new one here.
+    const snapshot = this.latestSnapshots.get(this.currentSessionId);
+    const initialSnapshotIdentifier = snapshot?.text().substring(0, 60).replace(/\\n/g, '\\\\n') ?? "[No Snapshot]";
 
+    let locator: Locator | undefined;
+
+    // --- Resolve locator: Prioritize selector, then ref ---
+    if (validatedArgs?.selector) {
+      identifier = validatedArgs.selector;
+      identifierType = "selector";
+      if (!identifier) {
+         throw new Error(`Missing required 'selector' argument for tool ${toolName}.`);
+      }
+      try {
+        locator = page.locator(identifier);
+        process.stderr.write(`[Context.executeRefAction ${toolName} Pre-Action] Using provided CSS selector: ${identifier}\\n`);
+      } catch (locatorError) {
+        throw new Error(`Failed to create locator for selector '${identifier}': ${locatorError instanceof Error ? locatorError.message : String(locatorError)}`);
+      }
+    } else if (validatedArgs?.ref) {
+      identifier = validatedArgs.ref;
+      identifierType = "ref";
+      if (!identifier) {
+        throw new Error(`Missing required 'ref' argument for tool ${toolName}.`);
+      }
+      if (!snapshot) {
+        throw new Error(`Cannot resolve ref '${identifier}' because no snapshot is available for session ${this.currentSessionId}. Capture a snapshot or ensure one exists.`);
+      }
+      try {
+        // Resolve using the snapshot we just retrieved
+        locator = snapshot.refLocator(identifier);
+        process.stderr.write(`[Context.executeRefAction ${toolName} Pre-Action] Successfully resolved ref ${identifier} using existing snapshot - ${initialSnapshotIdentifier}\\n`);
+      } catch (locatorError) {
+        // Use the existing snapshot identifier in the error
+        throw new Error(
+          `Failed to resolve ref ${identifier} using existing snapshot ${initialSnapshotIdentifier} before action attempt: ${locatorError instanceof Error ? locatorError.message : String(locatorError)}`
+        );
+      }
+    } else if (requiresIdentifier) {
+      // If neither ref nor selector is provided, but one is required
+       throw new Error(`Missing required 'ref' or 'selector' argument for tool ${toolName}.`);
+    } else {
+       // No identifier needed or provided
+       identifierType = "none"; // Explicitly set to none
+       process.stderr.write(`[Context.executeRefAction ${toolName} Pre-Action] No ref or selector required/provided.\\n`);
+    }
+
+    // --- Single Attempt ---
+    const logPrefix = `[Context.executeRefAction ${toolName}] ${new Date().toISOString()}:`;
+    try {
+      // Log which identifier/locator we ARE using for this attempt
+      if (identifierType === "selector") {
+        process.stderr.write(`${logPrefix} Using locator resolved from selector: ${identifier}\\n`);
+      } else if (identifierType === "ref") {
+        process.stderr.write(`${logPrefix} Using locator resolved from ref: ${identifier} (Snapshot: ${initialSnapshotIdentifier})\\n`);
+      } else {
+        process.stderr.write(`${logPrefix} Proceeding without specific element locator.\\n`);
+      }
+
+      // Pass page, the used identifier (selector or ref), args, the resolved locator, and identifierType
+      const actionFnResult = await actionFn(page, identifier, validatedArgs, locator, identifierType);
+
+      if (typeof actionFnResult === "string") {
+        resultText = actionFnResult;
+        actionResult = undefined;
+      } else {
+        actionResult = actionFnResult;
+        const content = actionResult?.content;
+        if (Array.isArray(content) && content.length > 0) {
+          resultText =
+            content
+              .map((c: { type: string; text?: string }) =>
+                c.type === "text" ? c.text : `[${c.type}]`
+              )
+              .filter(Boolean)
+              .join(" ") || `${toolName} action completed.`;
+        } else {
+          resultText = `${toolName} action completed successfully.`;
+        }
+      }
+      lastError = null;
+      return { resultText, actionResult };
+    } catch (error: any) {
+      // Throw the error immediately if the single attempt fails
+      throw new Error(
+        `Action ${toolName} failed: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
 
   async run(tool: Tool<any>, args: any): Promise<CallToolResult> {
     const toolName = tool.schema.name;
+    const logRunPrefix = `[Context.run ${toolName}]`; // Prefix for run-level logs
+    // --- NEW LOG ---\n    // console.error(`${logRunPrefix} START Received tool Args: ${JSON.stringify(args)}`);
+    process.stderr.write(`${logRunPrefix} START Received tool Args: ${JSON.stringify(args)}\\n`); // Changed and added newline
+    // -------------
     let initialPage: Page | null = null;
     let initialBrowser: BrowserSession["browser"] | null = null;
     let toolResultFromHandle: ToolResult | null = null; // Legacy handle result
+    let finalResult: CallToolResult = { // Initialize finalResult here
+      content: [{ type: "text", text: `Initialization error for ${toolName}` }],
+      isError: true,
+    };
 
     const logPrefix = `[Context.run ${toolName}] ${new Date().toISOString()}:`;
 
@@ -298,7 +369,7 @@ export class Context {
     try {
       validatedArgs = tool.schema.inputSchema.parse(args);
     } catch (error) {
-       if (error instanceof z.ZodError) {
+      if (error instanceof z.ZodError) {
         const errorMsg = error.issues.map((issue) => issue.message).join(", ");
         return this.createErrorResult(
           `Input validation failed: ${errorMsg}`,
@@ -314,330 +385,177 @@ export class Context {
     }
 
     const previousSessionId = this.currentSessionId;
-    if (validatedArgs?.sessionId && validatedArgs.sessionId !== this.currentSessionId) {
-        this.currentSessionId = validatedArgs.sessionId;
-        this.clearLatestSnapshot();
+    if (
+      validatedArgs?.sessionId &&
+      validatedArgs.sessionId !== this.currentSessionId
+    ) {
+      this.currentSessionId = validatedArgs.sessionId;
+      this.clearLatestSnapshot();
     }
 
-     if (toolName !== "browserbase_session_create") {
-        try {
-            const session = await getSession(this.currentSessionId, this.config);
-            if (!session || !session.page || session.page.isClosed() || !session.browser || !session.browser.isConnected()) {
-                if (this.currentSessionId !== previousSessionId) {
-                    this.currentSessionId = previousSessionId;
-                }
-                 throw new Error(`Session ${this.currentSessionId} is invalid or browser/page is not available.`);
-            }
-            initialPage = session.page;
-            initialBrowser = session.browser;
-        } catch (sessionError) {
-            return this.createErrorResult(
-                `Error retrieving or validating session ${this.currentSessionId}: ${sessionError instanceof Error ? sessionError.message : String(sessionError)}`,
-                toolName
-            );
+    if (toolName !== "browserbase_session_create") {
+      try {
+        const session = await getSession(this.currentSessionId, this.config);
+        if (
+          !session ||
+          !session.page ||
+          session.page.isClosed() ||
+          !session.browser ||
+          !session.browser.isConnected()
+        ) {
+          if (this.currentSessionId !== previousSessionId) {
+            this.currentSessionId = previousSessionId;
+          }
+          throw new Error(
+            `Session ${this.currentSessionId} is invalid or browser/page is not available.`
+          );
         }
+        initialPage = session.page;
+        initialBrowser = session.browser;
+      } catch (sessionError) {
+        return this.createErrorResult(
+          `Error retrieving or validating session ${this.currentSessionId}: ${
+            sessionError instanceof Error
+              ? sessionError.message
+              : String(sessionError)
+          }`,
+          toolName
+        );
+      }
     }
 
-    let finalResult: CallToolResult;
-    let executionResultText = '';
+    let executionResultText = "";
     let actionSucceeded = false;
     let shouldCaptureSnapshotAfterAction = false;
     let postActionSnapshot: PageSnapshot | undefined = undefined;
 
     try {
-        switch (toolName) {
-            // --- Ref-based actions ---
-            case 'browserbase_click': {
-                 const { resultText: clickResultText } = await this.executeRefAction(
-                     toolName,
-                     validatedArgs,
-                     async (page, ref) => {
-                         if (!ref) throw new Error("Ref is required for click");
-                         await page.click(ref);
-                         return `${toolName} successful for ref ${ref}.`;
-                     }
-                 );
-                 executionResultText = clickResultText;
-                 shouldCaptureSnapshotAfterAction = true;
-                 break;
-            }
-            case 'browserbase_type': {
-                 const { resultText: typeResultText } = await this.executeRefAction(
-                     toolName,
-                     validatedArgs,
-                     async (page, ref, args) => {
-                         if (!ref) throw new Error("Ref is required for type");
-                         await page.fill(ref, args.text || '');
-                         if (args.submit) {
-                             await page.press(ref, 'Enter');
-                         }
-                         return `${toolName} successful for ref ${ref}. Text: "${args.text}". Submitted: ${!!args.submit}.`;
-                     }
-                 );
-                 executionResultText = typeResultText;
-                 shouldCaptureSnapshotAfterAction = true;
-                 break;
-            }
-             case 'browserbase_select_option': {
-                 const { resultText: selectResultText } = await this.executeRefAction(
-                     toolName,
-                     validatedArgs,
-                     async (page, ref, args) => {
-                         if (!ref) throw new Error("Ref is required for select_option");
-                         const values = args.values || [];
-                         if (values.length === 0) throw new Error("No values provided to select.");
-                         await page.selectOption(ref, values);
-                         return `${toolName} successful for ref ${ref}. Values: ${values.join(', ')}.`;
-                     }
-                 );
-                 executionResultText = selectResultText;
-                 shouldCaptureSnapshotAfterAction = true;
-                 break;
-             }
-             case 'browserbase_hover': {
-                 const { resultText: hoverResultText } = await this.executeRefAction(
-                     toolName,
-                     validatedArgs,
-                     async (page, ref) => {
-                          if (!ref) throw new Error("Ref is required for hover");
-                          await page.hover(ref);
-                          return `${toolName} successful for ref ${ref}.`;
-                     }
-                 );
-                 executionResultText = hoverResultText;
-                 shouldCaptureSnapshotAfterAction = false; // Hover usually doesn't mandate a new snapshot
-                 break;
-             }
-             case 'browserbase_drag': {
-                 const { resultText: dragResultText } = await this.executeRefAction(
-                     toolName,
-                     validatedArgs,
-                     async (page, startRef, args) => {
-                         if (!startRef) throw new Error("startRef is required for drag");
-                         const endRef = args.endRef;
-                         if (!endRef) throw new Error("Missing 'endRef' for drag operation.");
+      let actionToRun: (() => Promise<ToolActionResult>) | undefined = undefined;
+      let shouldCaptureSnapshot = false;
 
-                         // Ensure both elements are visible before attempting drag
-                         const startLocator = page.locator(startRef);
-                         const endLocator = page.locator(endRef);
-                         await Promise.all([
-                              startLocator.waitFor({ state: 'visible', timeout: EXPLICIT_WAIT_TIMEOUT_MS }),
-                              endLocator.waitFor({ state: 'visible', timeout: EXPLICIT_WAIT_TIMEOUT_MS })
-                         ]);
-                         await page.dragAndDrop(startRef, endRef);
-                         return `${toolName} successful from ref ${startRef} to ref ${endRef}.`;
-                     },
-                     true // Requires startRef
-                 );
-                 executionResultText = dragResultText;
-                 shouldCaptureSnapshotAfterAction = true;
-                 break;
-            }
-             case 'browserbase_take_screenshot': {
-                  const requiresRefForScreenshot = !!validatedArgs.ref;
-                  const { resultText: screenshotResultText } = await this.executeRefAction(
-                      toolName,
-                      validatedArgs,
-                      async (page, ref, args): Promise<ToolActionResult> => { // Explicitly return ToolActionResult
-                           const screenshotOptions: Parameters<Page['screenshot']>[0] = {
-                                type: args.raw ? 'png' : 'jpeg'
-                           };
-                           const format = args.raw ? 'png' : 'jpeg';
-                           const mimeType = `image/${format}`;
-
-                           let screenshotBytesBase64: string;
-                           if (ref) {
-                                const bytesBuffer = await page.locator(ref).screenshot(screenshotOptions);
-                                screenshotBytesBase64 = bytesBuffer.toString('base64');
-                           } else {
-                                const bytesBuffer = await page.screenshot({ ...screenshotOptions, fullPage: true });
-                                screenshotBytesBase64 = bytesBuffer.toString('base64');
-                           }
-
-                           const name = `screenshot-${Date.now()}.${format}`;
-                           this.addScreenshot(name, format, screenshotBytesBase64);
-                           const uri = `mcp://screenshots/${name}`;
-
-                           // Conform to ToolActionResult structure with ImageContent and TextContent
-                           return {
-                                content: [
-                                    {
-                                        type: 'image',
-                                        mimeType: mimeType,
-                                        data: screenshotBytesBase64, // Use 'data' as expected by ImageContent
-                                        uri: uri
-                                    } as ImageContent, // Cast to ensure type match if needed, SDK types preferred
-                                     {
-                                         type: 'text',
-                                         text: `Screenshot captured (${ref ? 'element ' + ref : 'full page'}) and saved as ${name}. URI: ${uri}`
-                                     } as TextContent
-                                ]
-                           };
-                      },
-                      requiresRefForScreenshot
-                  );
-                  executionResultText = screenshotResultText;
-                  shouldCaptureSnapshotAfterAction = false;
-                  break;
-             }
-
-            // --- Non-Ref based actions ---
-            case 'browserbase_navigate':
-                if (!initialPage) throw new Error("Page not available for navigation.");
-                if (typeof validatedArgs.url !== 'string') throw new Error("Missing 'url' argument for navigate.");
-                await initialPage.goto(validatedArgs.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-                await this.waitForTimeout(500);
-                executionResultText = `Navigated to ${validatedArgs.url}`;
-                shouldCaptureSnapshotAfterAction = true;
-                break;
-
-            case 'browserbase_get_text':
-                 if (!initialPage) throw new Error("Page not available for get_text.");
-                 let textContent;
-                 const selector = validatedArgs.selector?.trim();
-                 if (selector) {
-                     try {
-                         await initialPage.waitForSelector(selector, { timeout: 5000, state: 'attached' });
-                         textContent = await initialPage.textContent(selector);
-                     } catch {
-                         textContent = "[Selector not found]";
-                     }
-                 } else {
-                     textContent = await initialPage.evaluate(() => document.body.innerText);
-                 }
-                 executionResultText = `Retrieved text:\n${textContent || ''}`;
-                 shouldCaptureSnapshotAfterAction = false;
-                 break;
-
-            case 'browserbase_snapshot':
-                const capturedSnap = await this.captureSnapshot();
-                if (capturedSnap) {
-                    executionResultText = 'Snapshot captured successfully.';
-                    postActionSnapshot = capturedSnap;
-                } else {
-                     throw new Error("Explicit snapshot capture failed.");
-                }
-                 shouldCaptureSnapshotAfterAction = false;
-                break;
-
-             case 'browser_press_key':
-                if (!initialPage) throw new Error("Page not available for press_key.");
-                const key = validatedArgs.key;
-                if (typeof key !== 'string') throw new Error("Missing 'key' argument for press_key.");
-
-                 if (key.length === 1) {
-                    await initialPage.keyboard.type(key);
-                 } else {
-                     await initialPage.keyboard.press(key);
-                 }
-                 await this.waitForTimeout(200);
-                 executionResultText = `Pressed key: ${key}`;
-                 shouldCaptureSnapshotAfterAction = true;
-                 break;
-
-            // --- Tools with standard 'run' method ---
-            default:
-                if ('run' in tool && typeof tool.run === 'function') {
-                    const runResult = await tool.run(validatedArgs);
-                     const resultTextContent = runResult.content?.find((c: { type: string, text?: string }) => c.type === 'text')?.text ?? `${toolName} completed.`;
-
-                     if (toolName === 'browserbase_session_create') {
-                         const newSessionIdMatch = resultTextContent.match(/Session (?:created|ID): (\S+)/);
-                        if (newSessionIdMatch?.[1] && newSessionIdMatch[1] !== this.currentSessionId) {
-                            this.currentSessionId = newSessionIdMatch[1];
-                            this.clearLatestSnapshot();
-                        }
-                     }
-
-                    if (runResult.isError) {
-                        throw new Error(resultTextContent);
-                    }
-                    executionResultText = resultTextContent;
-                    shouldCaptureSnapshotAfterAction = false;
-                }
-                // --- Legacy 'handle' method ---
-                else if ('handle' in tool && typeof tool.handle === 'function') {
-                     toolResultFromHandle = await tool.handle(this as any, validatedArgs);
-                     if (toolResultFromHandle?.resultOverride) {
-                         executionResultText = toolResultFromHandle.resultOverride.content?.map((c: any) => c.type === 'text' ? c.text : `[${c.type}]`).join(' ') ?? '';
-                     } else if (toolResultFromHandle?.action) {
-                          executionResultText = `Tool ${toolName} handled, but action execution might have been missed.`;
-                     } else {
-                        executionResultText = `${toolName} handled without action.`;
-                     }
-                     shouldCaptureSnapshotAfterAction = toolResultFromHandle?.captureSnapshot ?? false;
-                }
-                else {
-                     throw new Error(`Tool ${toolName} could not be handled (no run/handle method or unhandled case).`);
-                }
-                break;
+      try {
+        if ('handle' in tool && typeof tool.handle === 'function') {
+            toolResultFromHandle = await tool.handle(this as any, validatedArgs);
+            actionToRun = toolResultFromHandle?.action;
+            shouldCaptureSnapshot = toolResultFromHandle?.captureSnapshot ?? false;
+            shouldCaptureSnapshotAfterAction = shouldCaptureSnapshot;
+        } else {
+            throw new Error(`Tool ${toolName} could not be handled (no handle method).`);
         }
 
-        actionSucceeded = true;
-        finalResult = { content: [{ type: 'text', text: executionResultText }], isError: false };
-
-    } catch (error) {
+        if (actionToRun) {
+            const actionResult = await actionToRun();
+            if (actionResult?.content) {
+                executionResultText = actionResult.content
+                    .map((c: { type: string; text?: string }) => c.type === "text" ? c.text : `[${c.type}]`)
+                    .filter(Boolean)
+                    .join(" ") || `${toolName} action completed.`;
+            } else {
+                executionResultText = `${toolName} action completed successfully.`;
+            }
+            actionSucceeded = true;
+        } else {
+            throw new Error(`Tool ${toolName} handled without action.`);
+        }
+      } catch (error) {
+        process.stderr.write(`${logPrefix} Error executing tool ${toolName}: ${error instanceof Error ? error.message : String(error)}\\n`); // Changed and added newline
+        // --- LOG STACK TRACE ---
+        if (error instanceof Error && error.stack) {
+          // console.error(`${logPrefix} Stack Trace: ${error.stack}`);
+          process.stderr.write(`${logPrefix} Stack Trace: ${error.stack}\\n`); // Changed and added newline
+        }
+        // -----------------------
         finalResult = this.createErrorResult(
-            `Tool execution failed for ${toolName}: ${error instanceof Error ? error.message : String(error)}`,
-            toolName
+          `Execution failed: ${error instanceof Error ? error.message : String(error)}`,
+          toolName
         );
         actionSucceeded = false;
         shouldCaptureSnapshotAfterAction = false;
-         if (this.currentSessionId !== previousSessionId && toolName !== 'browserbase_session_create') {
-              this.currentSessionId = previousSessionId;
-         }
-    } finally {
+        if (
+          this.currentSessionId !== previousSessionId &&
+          toolName !== "browserbase_session_create"
+        ) {
+          this.currentSessionId = previousSessionId;
+        }
+      } finally {
         if (actionSucceeded && shouldCaptureSnapshotAfterAction) {
-            const preSnapshotDelay = 500;
-            await this.waitForTimeout(preSnapshotDelay);
-            try {
-                postActionSnapshot = await this.captureSnapshot();
-            } catch(postSnapError) {
-                 // Log warning, don't fail the whole operation
+          const preSnapshotDelay = 500;
+          await this.waitForTimeout(preSnapshotDelay);
+          try {
+            postActionSnapshot = await this.captureSnapshot();
+            if (postActionSnapshot) {
+              // Log successful snapshot capture and storage
+              // console.error(`[Context.run ${toolName}] Adding final snapshot to result.`);
+              process.stderr.write(`[Context.run ${toolName}] Adding final snapshot to result.\\n`); // Changed and added newline
+              // finalResult.snapshot = postActionSnapshot.render(); // REMOVED - .render() doesn't exist and text is added later
+            } else {
+              // console.error(`[Context.run ${toolName}] WARN: Snapshot was expected after action but failed to capture.`);
+              process.stderr.write(`[Context.run ${toolName}] WARN: Snapshot was expected after action but failed to capture.\\n`); // Changed and added newline
             }
-        } else if (actionSucceeded && toolName === 'browserbase_snapshot' && !postActionSnapshot) {
-             postActionSnapshot = this.latestSnapshots.get(this.currentSessionId);
+          } catch (postSnapError) {
+            // Log warning, don't fail the whole operation
+            // console.warn(`${logPrefix} Error capturing post-action snapshot: ${postSnapError instanceof Error ? postSnapError.message : String(postSnapError)}`);
+            process.stderr.write(`[Context.run ${toolName}] WARN: Error capturing post-action snapshot: ${postSnapError instanceof Error ? postSnapError.message : String(postSnapError)}\\n`); // Changed and added newline
+          }
+        } else if (
+          actionSucceeded &&
+          toolName === "browserbase_snapshot" &&
+          !postActionSnapshot
+        ) {
+          postActionSnapshot = this.latestSnapshots.get(this.currentSessionId);
         }
 
         if (actionSucceeded) {
-            const currentPage = await this.getActivePage();
-            let finalOutputText = executionResultText; // Start with execution text
+          const currentPage = await this.getActivePage();
+          let finalOutputText = executionResultText; // Start with execution text
 
-            if (currentPage) {
-                 try {
-                     const url = currentPage.url();
-                     const title = await currentPage.title().catch(() => '[Error retrieving title]');
-                     finalOutputText += `\n\n- Page URL: ${url}\n- Page Title: ${title}`;
-                 } catch (pageStateError) {
-                      finalOutputText += "\n\n- [Error retrieving page state after action]";
-                 }
-            } else {
-                 finalOutputText += "\n\n- [Page unavailable after action]";
+          if (currentPage) {
+            try {
+              const url = currentPage.url();
+              const title = await currentPage
+                .title()
+                .catch(() => "[Error retrieving title]");
+              finalOutputText += `\n\n- Page URL: ${url}\n- Page Title: ${title}`;
+            } catch (pageStateError) {
+              finalOutputText +=
+                "\n\n- [Error retrieving page state after action]";
             }
+          } else {
+            finalOutputText += "\n\n- [Page unavailable after action]";
+          }
 
-            const snapshotToAdd = postActionSnapshot;
-            if (snapshotToAdd) {
-                finalOutputText += `\n\n- Page Snapshot\n\`\`\`yaml\n${snapshotToAdd.text()}\n\`\`\`\n`;
-            } else {
-                 finalOutputText += `\n\n- [No relevant snapshot available after action]`;
-            }
+          const snapshotToAdd = postActionSnapshot;
+          if (snapshotToAdd) {
+            finalOutputText += `\n\n- Page Snapshot\n\`\`\`yaml\n${snapshotToAdd.text()}\n\`\`\`\n`;
+            // console.error(`[Context.run ${toolName}] Added snapshot to final result text.`);
+            process.stderr.write(`[Context.run ${toolName}] Added snapshot to final result text.\\n`); // Changed and added newline
+          } else {
+            finalOutputText += `\n\n- [No relevant snapshot available after action]`;
+          }
 
-            finalResult = { content: [{ type: 'text', text: finalOutputText }], isError: false };
-
+          finalResult = {
+            content: [{ type: "text", text: finalOutputText }],
+            isError: false,
+          };
         } else {
-            // Error result is already set in catch block
+          // Error result is already set in catch block, but ensure it IS set.
+          if (!finalResult || !finalResult.isError) {
+             finalResult = this.createErrorResult(
+               `Unknown error occurred during ${toolName}`,
+               toolName
+             );
+          }
         }
+
+        // --- NEW LOG ---\n      // console.error(`[Context.run ${toolName}] END Returning result: ${JSON.stringify(finalResult)?.substring(0, 200)}...`);
+        process.stderr.write(`[Context.run ${toolName}] END Returning result: ${JSON.stringify(finalResult)?.substring(0, 200)}...\\n`); // Changed and added newline
+        // -------------
+
+        return finalResult;
+      }
+    } catch (error) {
+      process.stderr.write(`${logPrefix} Error running tool ${toolName}: ${error instanceof Error ? error.message : String(error)}\\n`); // Changed and added newline
+      throw error;
     }
-
-    return finalResult;
-  }
-
-
-  async close(): Promise<void> {
-    await closeAllSessions();
-    this.screenshots.clear();
-    this.latestSnapshots.clear();
-    this.screenshotResources.clear();
-    this.currentSessionId = defaultSessionId;
   }
 }
