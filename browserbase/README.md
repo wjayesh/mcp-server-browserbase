@@ -23,6 +23,35 @@ to provide browser automation tools.
 node dist/index.js
 ```
 
+## How to setup in MCP json
+
+```json
+   {
+      "mcpServers": {
+         "playwright": {
+            "url": "http://localhost:8931/sse",
+            "env": {
+            "BROWSERBASE_API_KEY": "",
+            "BROWSERBASE_PROJECT_ID": ""
+            }
+         }
+      }
+   }
+```
+
+## Local Dev
+
+To run locally we can self-host over SSE. 
+
+```bash
+   node cli.js --port 8931
+```
+
+From here you should be able to put the url as "http://localhost:8931/sse" in the config.json
+
+You can also pass in the optional flags for proxies and context id that are shown in ./config.d.ts
+____
+
 The server communicates over stdio according to the Model Context Protocol.
 
 ## Structure

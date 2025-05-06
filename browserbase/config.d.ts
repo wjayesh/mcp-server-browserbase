@@ -1,5 +1,11 @@
 export type Config = {
+    /**
+     * The Browserbase API Key to use
+     */
     browserbaseApiKey?: string;
+    /**
+     * The Browserbase Project ID to use
+     */
     browserbaseProjectId?: string;
     /** 
      * Whether or not to use Browserbase proxies  
