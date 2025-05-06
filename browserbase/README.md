@@ -35,7 +35,28 @@ to provide browser automation tools.
 
 ## Local Dev
 
-To run locally we can self-host over SSE. 
+To run locally we can use STDIO or self-host over SSE. 
+
+### STDIO: 
+
+To your MCP Config JSON file add the following: 
+
+```json
+{
+  "mcpServers": {
+    "playwright": {
+      "command" : "node",
+      "args" : ["/path/to/mcp-server-browserbase/browserbase/cli.js"],
+      "env": {
+        "BROWSERBASE_API_KEY": "",
+        "BROWSERBASE_PROJECT_ID": ""
+      }
+    }
+  }
+}
+```
+
+### SSE: 
 
 ```bash
    node cli.js --port 8931

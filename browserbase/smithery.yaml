@@ -1,24 +1,32 @@
 # Smithery configuration file: https://smithery.ai/docs/config#smitheryyaml
 
-startCommand:
-  type: stdio
-  configSchema:
-    # JSON Schema defining the configuration options for the MCP.
-    type: object
-    required:
-      - browserbaseApiKey
-      - browserbaseProjectId
-    properties:
-      browserbaseApiKey:
-        type: string
-        description: The API key for Browserbase.
-      browserbaseProjectId:
-        type: string
-        description: The project ID for Browserbase.
-  commandFunction:
-    |-
-    config => ({command: 'node', args: ['cli.js'], env: {BROWSERBASE_API_KEY: config.browserbaseApiKey, BROWSERBASE_PROJECT_ID: config.browserbaseProjectId}})
+# startCommand:
+#   # Using stdio type which is the most common for MCPs
+#   type: stdio
+#   configSchema:
+#     # JSON Schema defining the configuration options for the MCP.
+#     type: object
+#     required:
+#       - browserbaseApiKey
+#       - browserbaseProjectId
+#     properties:
+#       browserbaseApiKey:
+#         type: string
+#         description: The API key for Browserbase.
+#       browserbaseProjectId:
+#         type: string
+#         description: The project ID for Browserbase.
+#   commandFunction: |
+#     config => ({
+#       command: 'node',
 
+#       env: {
+#         BROWSERBASE_API_KEY: config.browserbaseApiKey,
+#         BROWSERBASE_PROJECT_ID: config.browserbaseProjectId
+#       }
+#     })
+
+startCommand:
   type: http
   configSchema:
     type: object
@@ -36,6 +44,12 @@ startCommand:
       browserbaseProjectId:
         type: string
         description: The project ID for Browserbase.
-  commandFunction:
-    |-
-    config => ({command: 'node', args: ['cli.js --port', config.port], env: {BROWSERBASE_API_KEY: config.browserbaseApiKey, BROWSERBASE_PROJECT_ID: config.browserbaseProjectId}})
+  commandFunction: |
+    config => ({
+      command: 'node',
+      args: ['cli.js', '--port', config.port.toString()],
+      env: {
+        BROWSERBASE_API_KEY: config.browserbaseApiKey,
+        BROWSERBASE_PROJECT_ID: config.browserbaseProjectId
+      }
+    })
