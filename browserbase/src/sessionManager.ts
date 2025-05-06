@@ -4,7 +4,9 @@ import {
   Page,
 } from "playwright-core";
 import { Browserbase } from "@browserbasehq/sdk";
-import type { Config } from "./config.js";
+import type { Config } from "./config.js"; // Import Config type
+import { SessionCreateParams } from "@browserbasehq/sdk/src/resources/sessions/sessions.js";
+// import { Writable } from "stream"; // Import Writable for process.stderr
 
 // Define the type for a session object
 export type BrowserSession = {
@@ -24,6 +26,18 @@ type SessionCreationOptions = {
   };
   // Add other potential Browserbase session options here if needed
 };
+
+// Cookie interface matching Playwright's cookie format
+export interface Cookie {
+  name: string;
+  value: string;
+  domain: string;
+  path?: string;
+  expires?: number;
+  httpOnly?: boolean;
+  secure?: boolean;
+  sameSite?: "Strict" | "Lax" | "None";
+}
 
 // Global state for managing browser sessions
 const browsers = new Map<string, BrowserSession>();
@@ -57,14 +71,33 @@ export function getActiveSessionId(): string {
   return activeSessionId;
 }
 
+/**
+ * Adds cookies to a browser context
+ * @param context Playwright browser context
+ * @param cookies Array of cookies to add
+ */
+export async function addCookiesToContext(context: any, cookies: Cookie[]): Promise<void> {
+  if (!cookies || cookies.length === 0) {
+    return;
+  }
+  
+  try {
+    process.stderr.write(`[SessionManager] Adding ${cookies.length} cookies to browser context\n`);
+    await context.addCookies(cookies);
+    process.stderr.write(`[SessionManager] Successfully added cookies to browser context\n`);
+  } catch (error) {
+    process.stderr.write(
+      `[SessionManager] Error adding cookies to browser context: ${
+        error instanceof Error ? error.message : String(error)
+      }\n`
+    );
+  }
+}
+
 // Function to create a new Browserbase session and connect Playwright
 export async function createNewBrowserSession(
   newSessionId: string,
-  config: Config,
-  options?: {
-    contextId?: string;
-    persistContext?: boolean;
-  }
+  config: Config, // Accept config object
 ): Promise<BrowserSession> {
   if (!config.browserbaseApiKey) {
     throw new Error("Browserbase API Key is missing in the configuration.");
@@ -77,15 +110,30 @@ export async function createNewBrowserSession(
     apiKey: config.browserbaseApiKey,
   });
 
-  const sessionOptions: SessionCreationOptions = {
-    projectId: config.browserbaseProjectId,
+  // Prepare session creation options
+  const sessionOptions: SessionCreateParams = {
+    // Use non-null assertion after check
+    projectId: config.browserbaseProjectId!,
+    proxies: config.proxies, 
+    browserSettings: {
+      viewport: { // better for snapshots
+        width: 1024,
+        height: 768,
+      },
+    },
   };
 
-  if (options?.contextId) {
+  console.error("config.context", config.context);
+  // Add context settings if provided
+  if (config.context?.contextId) {
     sessionOptions.browserSettings = {
+      viewport: { // better for snapshots
+        width: 1024,
+        height: 768,
+      },
       context: {
-        id: options.contextId,
-        persist: options.persistContext !== false, // Default to true
+        id: config.context.contextId,
+        persist: config.context.persist || true, // Default to true if not specified
       },
     };
   }
@@ -128,6 +176,12 @@ export async function createNewBrowserSession(
     if (!context) {
       context = await browser.newContext();
     }
+    
+    // Add cookies to the context if they are provided in the config
+    if (config.cookies && Array.isArray(config.cookies) && config.cookies.length > 0) {
+      await addCookiesToContext(context, config.cookies);
+    }
+    
     let page = context.pages()[0];
     if (!page) {
       page = await context.newPage();

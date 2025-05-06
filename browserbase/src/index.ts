@@ -15,7 +15,7 @@ import getText from "./tools/getText.js";
 import session from "./tools/session.js";
 import common from "./tools/common.js";
 import contextTools from "./tools/context.js";
-import cookies from "./tools/cookies.js";
+import cookies from "./cookies.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListResourcesRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";

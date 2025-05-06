@@ -18,7 +18,22 @@ export type Config = {
      * Potential Browserbase Context to use 
      * Would be a context ID 
      */
-    context?: string;
+    context?: {
+        /**
+         * The ID of the context to use
+         */
+        contextId?: string;
+        /**
+         * Whether or not to persist the context
+         * 
+         * @default true
+         */
+        persist?: boolean;
+    };
+    /**
+     * Cookies to inject into the Browserbase context
+     */
+    cookies?: JSON;
     /**
      * Whether or not to port to a server
      * 

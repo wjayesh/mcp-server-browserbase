@@ -13,15 +13,23 @@ export interface Config {
     host?: string;
   };
   proxies?: boolean;
-  contextId?: string;
+  context?: {
+    contextId?: string;
+    persist?: boolean;
+  };
+  cookies?: JSON;
 }
 
 // Define Command Line Options Structure
 export type CLIOptions = {
+  browserbaseApiKey?: string;
+  browserbaseProjectId?: string;
   proxies?: boolean;
   contextId?: string;
+  persist?: boolean;
   port?: number;
   host?: string;
+  cookies?: JSON;
 };
 
 // Default Configuration Values
@@ -29,7 +37,15 @@ const defaultConfig: Config = {
   browserbaseApiKey: process.env.BROWSERBASE_API_KEY,
   browserbaseProjectId: process.env.BROWSERBASE_PROJECT_ID,
   proxies: false,
-  contextId: undefined,
+  context: {
+    contextId: undefined,
+    persist: true,
+  },
+  server: {
+    port: undefined,
+    host: undefined,
+  },
+  cookies: undefined,
 };
 
 // Resolve final configuration by merging defaults, file config, and CLI options
@@ -40,8 +56,12 @@ export async function resolveConfig(cliOptions: CLIOptions): Promise<Config> {
 
   // --- Add Browserbase Env Vars ---
   // Ensure env vars are read *after* dotenv potentially runs (in index.ts)
-  mergedConfig.browserbaseApiKey = process.env.BROWSERBASE_API_KEY;
-  mergedConfig.browserbaseProjectId = process.env.BROWSERBASE_PROJECT_ID;
+  if (!mergedConfig.browserbaseApiKey) {
+    mergedConfig.browserbaseApiKey = process.env.BROWSERBASE_API_KEY;
+  }
+  if (!mergedConfig.browserbaseProjectId) {
+    mergedConfig.browserbaseProjectId = process.env.BROWSERBASE_PROJECT_ID;
+  }
   // --------------------------------
 
   // Basic validation for Browserbase keys
@@ -58,12 +78,18 @@ export async function resolveConfig(cliOptions: CLIOptions): Promise<Config> {
 // Create Config structure based on CLI options
 export async function configFromCLIOptions(cliOptions: CLIOptions): Promise<Config> {
  return {
+    browserbaseApiKey: cliOptions.browserbaseApiKey,
+    browserbaseProjectId: cliOptions.browserbaseProjectId,
     server: {
       port: cliOptions.port,
       host: cliOptions.host,
     },
-    proxies: cliOptions.proxies || false,
-    contextId: cliOptions.contextId || undefined,
+    proxies: cliOptions.proxies,
+    context: {
+      contextId: cliOptions.contextId,
+      persist: cliOptions.persist,
+    },
+    cookies: cliOptions.cookies,
   };
 }
 
@@ -85,8 +111,37 @@ function pickDefined<T extends object>(obj: T | undefined): Partial<T> {
 
 // Merge two configuration objects (overrides takes precedence)
 function mergeConfig(base: Config, overrides: Config): Config {
-  return {
-    ...pickDefined(base),
-    ...pickDefined(overrides),
-  };
+  const baseFiltered = pickDefined(base);
+  const overridesFiltered = pickDefined(overrides);
+  
+  // Create the result object
+  const result = { ...baseFiltered } as Config;
+  
+  // For each property in overrides
+  for (const [key, value] of Object.entries(overridesFiltered)) {
+    if (key === 'context' && value && result.context) {
+      // Special handling for context object to ensure deep merge
+      result.context = {
+        ...result.context,
+        ...(value as Config['context'])
+      };
+    } else if (
+      value && 
+      typeof value === 'object' && 
+      !Array.isArray(value) && 
+      result[key as keyof Config] && 
+      typeof result[key as keyof Config] === 'object'
+    ) {
+      // Deep merge for other nested objects
+      result[key as keyof Config] = {
+        ...(result[key as keyof Config] as object),
+        ...value
+      } as any;
+    } else {
+      // Simple override for primitives, arrays, etc.
+      result[key as keyof Config] = value as any;
+    }
+  }
+  
+  return result;
 } 

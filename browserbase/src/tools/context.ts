@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Tool, ToolSchema, ToolContext, ToolResult } from "./tool.js";
-import { createSuccessResult, createErrorResult } from "./toolUtils.js";
+// import { createSuccessResult, createErrorResult } from "./toolUtils.js";
 import type { Context } from "../context.js";
 import type { ToolActionResult } from "../context.js";
 import { Browserbase } from "@browserbasehq/sdk";
@@ -65,12 +65,40 @@ async function handleCreateContext(
     }
   };
 
-  return {
-    action,
-    code: [],
-    captureSnapshot: false,
-    waitForNetwork: false,
-  };
+    console.error("Creating new Browserbase context");
+    const bbContext = await bb.contexts.create({
+      projectId: config.browserbaseProjectId,
+    });
+
+    console.error(`Successfully created context: ${bbContext.id}`);
+    
+    // Store context ID with optional name if provided
+    const contextName = params.name || bbContext.id;
+    contexts.set(contextName, bbContext.id);
+    
+    const result: ToolActionResult = {
+      content: [
+        {
+          type: "text",
+          text: `Created new Browserbase context with ID: ${bbContext.id}${params.name ? ` and name: ${params.name}` : ''}`,
+        },
+      ],
+    };
+
+    return {
+      resultOverride: result,
+      action: async () => {
+        console.error("Create Context action");
+        return result;
+      },
+      code: [],
+      captureSnapshot: false,
+      waitForNetwork: false,
+    };
+  } catch (error: any) {
+    console.error(`CreateContext handle failed: ${error.message || error}`);
+    throw new Error(`Failed to create Browserbase context: ${error.message || error}`);
+  }
 }
 
 // --- Tool: Delete Context ---
@@ -161,18 +189,26 @@ async function handleDeleteContext(
     }
   };
 
-  return {
-    action,
-    code: [],
-    captureSnapshot: false,
-    waitForNetwork: false,
-  };
+    return {
+      resultOverride: result,
+      action: async () => {
+        console.error("Delete Context action");
+        return result;
+      },
+      code: [],
+      captureSnapshot: false,
+      waitForNetwork: false,
+    };
+  } catch (error: any) {
+    console.error(`DeleteContext handle failed: ${error.message || error}`);
+    throw new Error(`Failed to delete Browserbase context: ${error.message || error}`);
+  }
 }
 
 // Helper function to get a context ID from name or direct ID (exported for use by session.ts)
 export function getContextId(nameOrId: string): string | undefined {
   // First check if it's a direct context ID
-  if (nameOrId.length > 20) {  // Assumption: context IDs are long strings
+  if (nameOrId.length == 32) {   // 32 char uuid
     return nameOrId;
   }
   
