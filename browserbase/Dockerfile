@@ -1,22 +1,38 @@
 # Basic Node.js Dockerfile
 FROM node:20-slim
 
-WORKDIR /usr/src/app
+WORKDIR /app
 
 # Install dependencies
-COPY package*.json ./
+COPY browserbase/package.json browserbase/package-lock.json ./
 RUN npm ci --only=production
 
-# Copy application code
-COPY dist ./dist
-COPY src ./src
+# Install dependencies
+RUN npm install
+
+# Copy the rest of the application source code
+COPY browserbase/ .
+
+# Build the TypeScript source code
+RUN npm run build
+
+# Create the final image from a smaller Node.js runtime
+FROM node:18-alpine
+
+# Set the working directory
+WORKDIR /app
+
+# Copy built files from the builder stage
+COPY --from=builder /app/dist /app/dist
+COPY --from=builder /app/package.json /app/package.json
+COPY --from=builder /app/package-lock.json /app/package-lock.json
 
 # Define environment variables (can be overridden)
 ENV NODE_ENV=production
-# ENV BROWSERBASE_API_KEY=your_api_key
-# ENV BROWSERBASE_PROJECT_ID=your_project_id
+ENV BROWSERBASE_API_KEY=<YOUR_BROWSERBASE_API_KEY>
+ENV BROWSERBASE_PROJECT_ID=<YOUR_BROWSERBASE_PROJECT_ID>
 
-# Expose a default port (useful if deploying as a service, though stdio is used now)
-EXPOSE 8080
+# Expose a default port (useful if deploying as a service) 8931 is standard for sse mcp
+EXPOSE 8931
 
-CMD [ "node", "dist/index.js" ] 
+CMD [ "node", "cli.js" ] 
