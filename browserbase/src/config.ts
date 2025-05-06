@@ -1,3 +1,10 @@
+import os from 'os';
+import fs from 'fs';
+import path from 'path';
+import { sanitizeForFilePath } from './tools/utils.js'; // Assuming this path is correct
+
+export type ToolCapability = 'core' | string; // Example capabilities
+
 export interface Config {
   browserbaseApiKey?: string; // Make optional for easier merging
   browserbaseProjectId?: string; // Make optional for easier merging
@@ -16,6 +23,7 @@ export type CLIOptions = {
   port?: number;
   host?: string;
 };
+
 // Default Configuration Values
 const defaultConfig: Config = {
   browserbaseApiKey: process.env.BROWSERBASE_API_KEY,
@@ -54,10 +62,19 @@ export async function configFromCLIOptions(cliOptions: CLIOptions): Promise<Conf
       port: cliOptions.port,
       host: cliOptions.host,
     },
-    proxies: cliOptions.proxies,
-    contextId: cliOptions.contextId,
+    proxies: cliOptions.proxies || false,
+    contextId: cliOptions.contextId || undefined,
   };
 }
+
+// Create an output file path within the configured output directory
+export async function outputFile(config: Config, name: string): Promise<string> {
+  const outputDir = os.tmpdir();
+  await fs.promises.mkdir(outputDir, { recursive: true });
+  const sanitizedName = sanitizeForFilePath(name);
+  return path.join(outputDir, sanitizedName);
+}
+
 // Helper function to merge config objects, excluding undefined values
 function pickDefined<T extends object>(obj: T | undefined): Partial<T> {
   if (!obj) return {};

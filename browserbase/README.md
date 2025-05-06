@@ -30,9 +30,10 @@ node dist/index.js
       "mcpServers": {
          "playwright": {
             "url": "http://localhost:8931/sse",
+            "args" : ["--proxies"],
             "env": {
-            "BROWSERBASE_API_KEY": "",
-            "BROWSERBASE_PROJECT_ID": ""
+               "BROWSERBASE_API_KEY": "",
+               "BROWSERBASE_PROJECT_ID": ""
             }
          }
       }
@@ -49,7 +50,7 @@ To run locally we can self-host over SSE.
 
 From here you should be able to put the url as "http://localhost:8931/sse" in the config.json
 
-You can also pass in the optional flags for proxies and context id that are shown in ./config.d.ts
+You can also pass in the optional flags for proxies and context id that are shown in [`config.d.ts`](./config.d.ts).
 ____
 
 The server communicates over stdio according to the Model Context Protocol.
