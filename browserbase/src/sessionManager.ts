@@ -30,7 +30,7 @@ const browsers = new Map<string, BrowserSession>();
 // Keep track of the default session explicitly
 let defaultBrowserSession: BrowserSession | null = null;
 // Define a specific ID for the default session
-export const defaultSessionId = "browser_session_main";
+export const defaultSessionId = "browserbase_session_main";
 
 // Keep track of the active session ID. Defaults to the main session.
 let activeSessionId: string = defaultSessionId;

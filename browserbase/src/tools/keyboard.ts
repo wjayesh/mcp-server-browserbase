@@ -72,7 +72,7 @@ const pressKey: ToolFactory = captureSnapshot => defineTool({
   capability: 'core',
 
   schema: {
-    name: 'browser_press_key', // Renamed from browserbase_press_key
+    name: 'browserbase_press_key',
     description: 'Press a key on the keyboard',
     inputSchema: z.object({
       key: z.string().describe('Name of the key to press or a character to generate, such as `ArrowLeft` or `a`'),
