@@ -115,10 +115,6 @@ export async function createNewBrowserSession(
   // Add context settings if provided
   if (config.context?.contextId) {
     sessionOptions.browserSettings = {
-      viewport: { // better for snapshots
-        width: 1024,
-        height: 768,
-      },
       context: {
         id: config.context.contextId,
         persist: config.context.persist || true, // Default to true if not specified
