@@ -13,7 +13,7 @@ export type Config = {
      * 
      * @default false
      */
-    proxies? : boolean;
+    proxies?: boolean;
     /**
      * Potential Browserbase Context to use 
      * Would be a context ID 
@@ -32,5 +32,17 @@ export type Config = {
          * The host to bind the server to. Default is localhost. Use 0.0.0.0 to bind to all interfaces.
          */
         host?: string;
-      },
+    };
+    tools?: {
+        /**
+         * Configuration for the browser_take_screenshot tool.
+         */
+        browser_take_screenshot?: {
+            /**
+             * Whether to disable base64-encoded image responses to the clients that
+             * don't support binary data or prefer to save on tokens.
+            */
+            omitBase64?: boolean;
+        }
+    }
 };

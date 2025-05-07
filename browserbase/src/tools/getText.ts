@@ -4,7 +4,6 @@ import type { Tool, ToolSchema, ToolContext, ToolResult } from "./tool.js";
 import { createSuccessResult, createErrorResult } from "./toolUtils.js"; // Assuming these exist
 import type { Context } from '../context.js'; // For handle signature
 import type { ToolActionResult } from '../context.js'; // For action return type
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 // --- Tool: Get Text ---
 const GetTextInputSchema = z.object({
@@ -24,9 +23,7 @@ async function handleGetText(context: Context, params: GetTextInput): Promise<To
     const action = async (): Promise<ToolActionResult> => {
         const page = await context.getActivePage();
         if (!page) {
-            // Cannot easily return error result from action, maybe throw?
             throw new Error('No active page found for getText');
-            // Or return specific content: return { content: [{ type: 'text', text: 'Error: No active page' }] };
         }
         try {
             let textContent: string | null;
@@ -40,15 +37,14 @@ async function handleGetText(context: Context, params: GetTextInput): Promise<To
             // Log error? Throw? Action results don't easily convey errors back to Context.run
             console.error(`GetText action failed: ${error}`);
             throw error; // Rethrow to be caught by Context.run's try/catch around handle/action
-            // Alternative: return { content: [{ type: 'text', text: `Error getting text: ${error}` }] };
         }
     };
 
     return {
         action,
-        code: [], // Add code property
-        captureSnapshot: false, // Getting text likely doesn't need snapshot update
-        waitForNetwork: false, // Getting text usually doesn't trigger navigation
+        code: [],
+        captureSnapshot: false,
+        waitForNetwork: false,
     };
 }
 

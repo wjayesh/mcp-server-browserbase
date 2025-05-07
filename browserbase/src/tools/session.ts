@@ -35,85 +35,82 @@ type CreateSessionInput = z.infer<typeof CreateSessionInputSchema>;
 const createSessionSchema: ToolSchema<typeof CreateSessionInputSchema> = {
   name: "browserbase_session_create", // Renamed
   description:
-    "Create or reuse a cloud browser session using Browserbase. Updates the active session.", // Updated description
+    "Create or reuse a cloud browser session using Browserbase. Updates the active session.", 
   inputSchema: CreateSessionInputSchema,
 };
 
-// No need for SessionContext interface here, Context is sufficient
-// interface SessionContext extends Context {
-//     currentSessionConnectUrl?: string; // Add connectUrl property
-// }
 
 // Handle function for CreateSession using SessionManager
 async function handleCreateSession(
   context: Context,
   params: CreateSessionInput
 ): Promise<ToolResult> {
-  try {
-    const config = context.getConfig(); // Get config from context
-    let targetSessionId: string;
+  // The main logic will now be inside the returned 'action' function
+  const action = async (): Promise<ToolActionResult> => {
+    try {
+      const config = context.config; // Get config from context
+      let targetSessionId: string;
 
-    // Decide session ID: Use provided, or default.
-    if (params.sessionId) {
-        // If a specific ID is provided, use it.
-        // NOTE: SessionManager's createNewBrowserSession currently always creates *new* underlying
-        // Browserbase sessions. True reuse might need changes in SessionManager.
-        // For now, we'll use the provided ID to *label* the new session in our map.
+      if (params.sessionId) {
         targetSessionId = params.sessionId;
-        console.error(`Attempting to create/assign session with specified ID: ${targetSessionId}`);
-    } else {
-        // If no ID is provided, target the default session.
+        process.stderr.write(
+          `[tool.createSession] Attempting to create/assign session with specified ID: ${targetSessionId}\n`
+        );
+      } else {
         targetSessionId = defaultSessionId;
-        console.error(`Attempting to create/ensure default session (ID: ${targetSessionId})`);
-    }
+        process.stderr.write(
+          `[tool.createSession] Attempting to create/ensure default session (ID: ${targetSessionId})\n`
+        );
+      }
 
-    // Use the SessionManager to create/ensure the session with the target ID
-    // ensureDefaultSessionInternal handles creation/validation logic specifically for the default ID.
-    // For non-default IDs, createNewBrowserSession will be used (implicitly, or explicitly if we refactor getSession/ensureDefault).
-    // For simplicity and focusing on the default flow, let's use createNew directly for non-default,
-    // and ensureDefault for the default case.
-    let session: BrowserSession;
-    if (targetSessionId === defaultSessionId) {
-        // ensureDefaultSessionInternal handles finding existing/creating new *default* session
-        session = await ensureDefaultSessionInternal(config); // Use ensureDefault for the default case
-    } else {
-        // For specific IDs, use createNewBrowserSession. This overwrites if ID already exists.
+      let session: BrowserSession;
+      if (targetSessionId === defaultSessionId) {
+        session = await ensureDefaultSessionInternal(config);
+      } else {
         session = await createNewBrowserSession(targetSessionId, config);
+      }
+
+      if (!session || !session.browser || !session.page || !session.sessionId) {
+        throw new Error(
+          `SessionManager failed to return a valid session object with actualSessionId for ID: ${targetSessionId}`
+        );
+      }
+
+      context.currentSessionId = targetSessionId;
+      process.stderr.write(
+        `[tool.createSession] Successfully ensured session. Internal ID: ${targetSessionId}, Actual ID: ${session.sessionId}\n`
+      );
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `https://www.browserbase.com/sessions/${session.sessionId}`,
+          },
+        ],
+      };
+    } catch (error: any) {
+      process.stderr.write(
+        `[tool.createSession] Action failed: ${
+          error.message || String(error)
+        }\n`
+      );
+      // Re-throw to be caught by Context.run's error handling for actions
+      throw new Error(
+        `Failed to create Browserbase session: ${
+          error.message || String(error)
+        }`
+      );
     }
+  };
 
-
-    // Check if session creation/retrieval was successful
-    if (!session || !session.browser || !session.page) {
-      throw new Error(`SessionManager failed to return a valid session object for ID: ${targetSessionId}`);
-    }
-
-    // Update context's current session ID to the one we targeted
-    context.currentSessionId = targetSessionId;
-    // console.error(`Successfully ensured session and set active ID: ${targetSessionId}`); // CHANGED to console.log or removed. Let's remove for now.
-
-    // Prepare the result
-    const result: ToolActionResult = {
-      content: [
-        {
-          type: "text",
-          text: `Created and set active Browserbase session ID: ${targetSessionId}`,
-        },
-      ],
-    };
-
-    return {
-      resultOverride: result,
-      code: [],
-      captureSnapshot: false, // No page state change yet
-      waitForNetwork: false,
-    };
-  } catch (error: any) {
-    console.error(`CreateSession handle failed: ${error.message || error}`);
-    // Re-throw the error so the main run function in context.ts can handle it
-    throw new Error(
-      `Failed to create Browserbase session: ${error.message || error}`
-    );
-  }
+  // Return the ToolResult structure expected by Context.run
+  return {
+    action: action, 
+    captureSnapshot: false, 
+    code: [],  
+    waitForNetwork: false, 
+  };
 }
 
 // Define tool using handle
@@ -124,5 +121,4 @@ const createSessionTool: Tool<typeof CreateSessionInputSchema> = {
 };
 
 // Export the single tool object as default
-export default createSessionTool; // Export the object directly
-// export default [createSessionTool]; // Export as an array containing the tool
+export default createSessionTool; 

@@ -27,9 +27,10 @@ import type { Context, ToolActionResult } from "../context.js"; // Assuming Cont
 import type { Page, Locator, FrameLocator } from "playwright-core"; // <-- ADDED Import Page and Locator
 import { PageSnapshot } from "../pageSnapshot.js"; // Adjust path if needed
 import { Writable } from "stream"; // Import Writable for process.stderr
+import { outputFile } from "../config.js"; // Added import for outputFile
 // Assuming this utility exists
 // Removed outputFile import as it's likely not used now
-import { outputFile } from '../config.js'; // Import outputFile
+// import { outputFile } from '../config.js'; // Import outputFile
 
 // --- Tool: Snapshot ---
 const SnapshotInputSchema = z.object({});
@@ -49,15 +50,19 @@ const snapshot = defineTool<typeof SnapshotInputSchema>({
     params: SnapshotInput
   ): Promise<ToolResult> => {
     const action = async (): Promise<ToolActionResult> => {
-      return { content: [{ type: "text", text: "Snapshot requested." }] };
+      const content: (TextContent | ImageContent)[] = [
+        { type: "text", text: "Accessibility snapshot captured." },
+      ];
+      return { content };
     };
+
     return {
       action,
-      code: [`// Request accessibility snapshot capture`],
+      code: [`// Request accessibility snapshot`],
       captureSnapshot: true,
       waitForNetwork: false,
       resultOverride: {
-        content: [{ type: "text", text: "Snapshot capture requested." }],
+        content: [{ type: "text", text: "Accessibility snapshot initiated." }],
       },
     };
   },
@@ -153,7 +158,9 @@ const drag = defineTool<typeof dragInputSchema>({
     const code = [
       `// Drag ${params.startElement} to ${params.endElement}`,
       // Use generateLocator for code string
-      `// await page.${await generateLocator(startLocator)}.dragTo(page.${await generateLocator(endLocator)});`,
+      `// await page.${await generateLocator(
+        startLocator
+      )}.dragTo(page.${await generateLocator(endLocator)});`,
     ];
 
     const action = async (): Promise<ToolActionResult> => {
@@ -253,25 +260,41 @@ const type = defineTool<typeof typeSchema>({
     const steps: (() => Promise<void>)[] = [];
 
     if (params.slowly) {
-      code.push(`// Press "${params.text}" sequentially into "${params.element}"`);
-      code.push(`// await page.${await generateLocator(locator)}.pressSequentially('${params.text.replace(/'/g, "\\'")}');`);
-      steps.push(() => locator.pressSequentially(params.text, { delay: 100, timeout: 5000 }));
+      code.push(
+        `// Press "${params.text}" sequentially into "${params.element}"`
+      );
+      code.push(
+        `// await page.${await generateLocator(
+          locator
+        )}.pressSequentially('${params.text.replace(/'/g, "\\'")}');`
+      );
+      steps.push(() =>
+        locator.pressSequentially(params.text, { delay: 100, timeout: 5000 })
+      );
     } else {
-       code.push(`// Fill "${params.text}" into "${params.element}"`);
-       code.push(`// await page.${await generateLocator(locator)}.fill('${params.text.replace(/'/g, "\\'")}');`);
-       steps.push(async () => {
-         await locator.waitFor({ state: "visible", timeout: 5000 });
-         if (!(await locator.isEditable({ timeout: 2000 }))) {
-            throw new Error(`Element '${params.element}' was visible but not editable.`);
-         }
-         await locator.fill("", { force: true, timeout: 5000 }); // Force empty fill first
-         await locator.fill(params.text, { force: true, timeout: 5000 }); // Force fill with text
-       });
+      code.push(`// Fill "${params.text}" into "${params.element}"`);
+      code.push(
+        `// await page.${await generateLocator(
+          locator
+        )}.fill('${params.text.replace(/'/g, "\\'")}');`
+      );
+      steps.push(async () => {
+        await locator.waitFor({ state: "visible", timeout: 5000 });
+        if (!(await locator.isEditable({ timeout: 2000 }))) {
+          throw new Error(
+            `Element '${params.element}' was visible but not editable.`
+          );
+        }
+        await locator.fill("", { force: true, timeout: 5000 }); // Force empty fill first
+        await locator.fill(params.text, { force: true, timeout: 5000 }); // Force fill with text
+      });
     }
 
     if (params.submit) {
       code.push(`// Submit text`);
-      code.push(`// await page.${await generateLocator(locator)}.press('Enter');`);
+      code.push(
+        `// await page.${await generateLocator(locator)}.press('Enter');`
+      );
       steps.push(() => locator.press("Enter", { timeout: 5000 }));
     }
 
@@ -290,7 +313,9 @@ const type = defineTool<typeof typeSchema>({
         content: [
           {
             type: "text",
-            text: `Typed "${params.text}" into: ${params.element}${params.submit ? " and submitted" : ""}`,
+            text: `Typed "${params.text}" into: ${params.element}${
+              params.submit ? " and submitted" : ""
+            }`,
           },
         ],
       };
@@ -326,12 +351,14 @@ const selectOption = defineTool<typeof selectOptionSchema>({
     const code = [
       `// Select options [${params.values.join(", ")}] in ${params.element}`,
       // Remove javascript.formatObject, use simple JSON.stringify for code comment
-      `// await page.${await generateLocator(locator)}.selectOption(${JSON.stringify(params.values)});`,
+      `// await page.${await generateLocator(
+        locator
+      )}.selectOption(${JSON.stringify(params.values)});`,
     ];
 
     const action = async (): Promise<ToolActionResult> => {
       try {
-         // Use locator directly for the action
+        // Use locator directly for the action
         await locator.waitFor({ state: "visible", timeout: 5000 });
         await locator.selectOption(params.values, { timeout: 5000 });
       } catch (selectError) {
@@ -390,76 +417,106 @@ const screenshot = defineTool<typeof screenshotSchema>({
     params: ScreenshotInput
   ): Promise<ToolResult> => {
     const page = await context.getActivePage();
-    if (!page) throw new Error("No active page found for screenshot");
+    if (!page) {
+      throw new Error("No active page found for screenshot");
+    }
+    // Conditionally get snapshot only if ref is provided
+    let pageSnapshot: PageSnapshot | null = null;
+    if (params.ref) {
+      pageSnapshot = context.snapshotOrDie();
+    }
+    const fileType = params.raw ? "png" : "jpeg";
+    // Use context.config directly for outputFile
+    const fileName = await outputFile(
+      context.config,
+      `screenshot-${Date.now()}.${fileType}`
+    );
 
-    const format = params.raw ? "png" : "jpeg";
-    const name = `screenshot-${Date.now()}.${format}`;
-    const isElementScreenshot = params.element && params.ref;
-    const snapshot = context.snapshotOrDie();
-    const locator = params.ref ? snapshot.refLocator(params.ref) : null;
-
-    // Revert to using outputFile with context['config'] as a workaround
-    // NOTE: This might fail if config is truly private at runtime.
-    // You should add a public method like getOutputPath to Context.
-    const outputPath = await outputFile((context as any)['config'], name);
-
-    const screenshotOptions: Parameters<Page["screenshot"]>[0] = {
-      type: format,
-      quality: format === "png" ? undefined : 50,
+    // Typing for Playwright screenshot options
+    const baseOptions: Omit<
+      Parameters<Page["screenshot"]>[0],
+      "type" | "quality" | "path"
+    > = {
       scale: "css",
-      timeout: 15000,
-      path: outputPath // Use obtained path
+      timeout: 15000, // Kept existing timeout
     };
 
-    let code: string[] = [];
-    code.push(`// Screenshot ${isElementScreenshot ? params.element : 'viewport'} and save it as ${screenshotOptions.path}`);
-    const optionsString = JSON.stringify(screenshotOptions).replace(/"/g, '\"');
-    if (locator)
-      code.push(`// await page.${await generateLocator(locator)}.screenshot(${optionsString});`);
-    else
-      code.push(`// await page.screenshot(${optionsString});`);
+    let options: Parameters<Page["screenshot"]>[0];
+
+    if (fileType === "jpeg") {
+      options = {
+        ...baseOptions,
+        type: "jpeg",
+        quality: 50, // Quality is only for jpeg
+        path: fileName,
+      };
+    } else {
+      options = {
+        ...baseOptions,
+        type: "png",
+        path: fileName,
+      };
+    }
+
+    const isElementScreenshot = params.element && params.ref;
+    const code: string[] = [];
+    code.push(
+      `// Screenshot ${
+        isElementScreenshot ? params.element : "viewport"
+      } and save it as ${fileName}`
+    );
+
+    // Conditionally get locator only if ref and snapshot are available
+    const locator = params.ref && pageSnapshot ? pageSnapshot.refLocator(params.ref) : null;
+
+    // Use JSON.stringify for code generation as javascript.formatObject is not available
+    const optionsForCode = { ...options };
+    // delete optionsForCode.path; // Path is an internal detail for saving, not usually part of the "command" log
+
+    if (locator) {
+      code.push(
+        `// await page.${await generateLocator(
+          locator
+        )}.screenshot(${JSON.stringify(optionsForCode)});`
+      );
+    } else {
+      code.push(`// await page.screenshot(${JSON.stringify(optionsForCode)});`);
+    }
 
     const action = async (): Promise<ToolActionResult> => {
-      let buffer: Buffer;
-      const actionLogPrefix = `[browserbase_take_screenshot action] ${new Date().toISOString()}:`;
+      // Access config via context.config
+      const includeBase64 =
+        !context.config.tools?.browser_take_screenshot?.omitBase64;
 
-      try {
-        // Use locator directly for action
-        buffer = locator ? await locator.screenshot(screenshotOptions) : await page.screenshot(screenshotOptions);
+      // Use the page directly for full page screenshots if locator is null
+      const screenshotBuffer = locator
+        ? await locator.screenshot(options)
+        : await page.screenshot(options);
 
-      } catch (screenshotError) {
-         // Keep existing error handling
-        const errorMsg =
-          screenshotError instanceof Error
-            ? screenshotError.message
-            : String(screenshotError);
-        throw new Error(`Failed to take screenshot. Error: ${errorMsg}`);
+      if (includeBase64) {
+        const rawBase64 = screenshotBuffer.toString("base64");
+        return {
+          content: [
+            {
+              type: "image",
+              format: fileType, // format might be redundant if mimeType is present, but kept for now
+              mimeType: fileType === "png" ? `image/png` : `image/jpeg`,
+              data: rawBase64,
+            },
+          ],
+        };
+      } else {
+        // If base64 is not included, return an empty content array, like playwright-mcp
+        return { content: [] };
       }
-
-      const base64 = buffer.toString("base64");
-      context.addScreenshot(name, format, base64);
-
-      const imageContent: ImageContent = {
-        type: "image",
-        format: format,
-        mimeType: `image/${format}`,
-        data: "",
-        detail: "low",
-        uri: `mcp://screenshots/${name}`,
-      };
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Screenshot taken${params.element ? ": " + params.element : " (viewport)"} and saved as resource '${name}'.`,
-          },
-          imageContent,
-        ],
-      };
     };
 
-    return { action, code, captureSnapshot: false, waitForNetwork: false };
+    return {
+      code,
+      action,
+      captureSnapshot: true, // Consistent with existing tool
+      waitForNetwork: false, // Consistent with existing tool
+    };
   },
 });
 
@@ -471,7 +528,3 @@ export async function generateLocator(locator: Locator): Promise<string> {
 }
 
 export default [snapshot, click, drag, hover, type, selectOption, screenshot];
-
-// ---> DELETE HELPER FUNCTION START <---
-// Deleted the getLocator function
-// ---> DELETE HELPER FUNCTION END <---

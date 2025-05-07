@@ -6,7 +6,7 @@ import {
   closeAllSessions,
 } from "./sessionManager.js";
 import type { Tool, ToolContext, ToolResult } from "./tools/tool.js";
-import type { Config } from "./config.js";
+import type { Config } from "../config.js";
 import {
   Resource,
   CallToolResult,
@@ -48,9 +48,8 @@ export type ToolActionResult =
  */
 export class Context {
   private server: Server;
-  private config: Config;
+  public readonly config: Config;
   public currentSessionId: string = defaultSessionId;
-  private screenshots = new Map<string, string>();
   private latestSnapshots = new Map<string, PageSnapshot>();
   private screenshotResources = new Map<
     string,
@@ -61,11 +60,6 @@ export class Context {
     this.server = server;
     this.config = config;
     this.screenshotResources = new Map();
-  }
-
-  // --- Public Getter for Config ---
-  public getConfig(): Config {
-    return this.config;
   }
 
   // --- Snapshot State Handling (Using PageSnapshot) ---
@@ -261,7 +255,9 @@ export class Context {
 
     // Get the CURRENT latest snapshot - DO NOT capture a new one here.
     const snapshot = this.latestSnapshots.get(this.currentSessionId);
-    const initialSnapshotIdentifier = snapshot?.text().substring(0, 60).replace(/\\n/g, '\\\\n') ?? "[No Snapshot]";
+    const initialSnapshotIdentifier =
+      snapshot?.text().substring(0, 60).replace(/\\n/g, "\\\\n") ??
+      "[No Snapshot]";
 
     let locator: Locator | undefined;
 
@@ -270,21 +266,33 @@ export class Context {
       identifier = validatedArgs.selector;
       identifierType = "selector";
       if (!identifier) {
-         throw new Error(`Missing required 'selector' argument for tool ${toolName}.`);
+        throw new Error(
+          `Missing required 'selector' argument for tool ${toolName}.`
+        );
       }
       try {
         locator = page.locator(identifier);
       } catch (locatorError) {
-        throw new Error(`Failed to create locator for selector '${identifier}': ${locatorError instanceof Error ? locatorError.message : String(locatorError)}`);
+        throw new Error(
+          `Failed to create locator for selector '${identifier}': ${
+            locatorError instanceof Error
+              ? locatorError.message
+              : String(locatorError)
+          }`
+        );
       }
     } else if (validatedArgs?.ref) {
       identifier = validatedArgs.ref;
       identifierType = "ref";
       if (!identifier) {
-        throw new Error(`Missing required 'ref' argument for tool ${toolName}.`);
+        throw new Error(
+          `Missing required 'ref' argument for tool ${toolName}.`
+        );
       }
       if (!snapshot) {
-        throw new Error(`Cannot resolve ref '${identifier}' because no snapshot is available for session ${this.currentSessionId}. Capture a snapshot or ensure one exists.`);
+        throw new Error(
+          `Cannot resolve ref '${identifier}' because no snapshot is available for session ${this.currentSessionId}. Capture a snapshot or ensure one exists.`
+        );
       }
       try {
         // Resolve using the snapshot we just retrieved
@@ -292,21 +300,33 @@ export class Context {
       } catch (locatorError) {
         // Use the existing snapshot identifier in the error
         throw new Error(
-          `Failed to resolve ref ${identifier} using existing snapshot ${initialSnapshotIdentifier} before action attempt: ${locatorError instanceof Error ? locatorError.message : String(locatorError)}`
+          `Failed to resolve ref ${identifier} using existing snapshot ${initialSnapshotIdentifier} before action attempt: ${
+            locatorError instanceof Error
+              ? locatorError.message
+              : String(locatorError)
+          }`
         );
       }
     } else if (requiresIdentifier) {
       // If neither ref nor selector is provided, but one is required
-       throw new Error(`Missing required 'ref' or 'selector' argument for tool ${toolName}.`);
+      throw new Error(
+        `Missing required 'ref' or 'selector' argument for tool ${toolName}.`
+      );
     } else {
-       // No identifier needed or provided
-       identifierType = "none"; // Explicitly set to none
+      // No identifier needed or provided
+      identifierType = "none"; // Explicitly set to none
     }
 
     // --- Single Attempt ---
     try {
       // Pass page, the used identifier (selector or ref), args, the resolved locator, and identifierType
-      const actionFnResult = await actionFn(page, identifier, validatedArgs, locator, identifierType);
+      const actionFnResult = await actionFn(
+        page,
+        identifier,
+        validatedArgs,
+        locator,
+        identifierType
+      );
 
       if (typeof actionFnResult === "string") {
         resultText = actionFnResult;
@@ -330,7 +350,9 @@ export class Context {
       return { resultText, actionResult };
     } catch (error: any) {
       throw new Error(
-        `Action ${toolName} failed: ${error instanceof Error ? error.message : String(error)}`
+        `Action ${toolName} failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`
       );
     }
   }
@@ -340,7 +362,8 @@ export class Context {
     let initialPage: Page | null = null;
     let initialBrowser: BrowserSession["browser"] | null = null;
     let toolResultFromHandle: ToolResult | null = null; // Legacy handle result
-    let finalResult: CallToolResult = { // Initialize finalResult here
+    let finalResult: CallToolResult = {
+      // Initialize finalResult here
       content: [{ type: "text", text: `Initialization error for ${toolName}` }],
       isError: true,
     };
@@ -406,48 +429,49 @@ export class Context {
       }
     }
 
-    let executionResultText = "";
+    let toolActionOutput: ToolActionResult | undefined = undefined; // New variable to store direct tool action output
     let actionSucceeded = false;
     let shouldCaptureSnapshotAfterAction = false;
     let postActionSnapshot: PageSnapshot | undefined = undefined;
 
     try {
-      let actionToRun: (() => Promise<ToolActionResult>) | undefined = undefined;
+      let actionToRun: (() => Promise<ToolActionResult>) | undefined =
+        undefined;
       let shouldCaptureSnapshot = false;
 
       try {
-        if ('handle' in tool && typeof tool.handle === 'function') {
-            toolResultFromHandle = await tool.handle(this as any, validatedArgs);
-            actionToRun = toolResultFromHandle?.action;
-            shouldCaptureSnapshot = toolResultFromHandle?.captureSnapshot ?? false;
-            shouldCaptureSnapshotAfterAction = shouldCaptureSnapshot;
+        if ("handle" in tool && typeof tool.handle === "function") {
+          toolResultFromHandle = await tool.handle(this as any, validatedArgs);
+          actionToRun = toolResultFromHandle?.action;
+          shouldCaptureSnapshot =
+            toolResultFromHandle?.captureSnapshot ?? false;
+          shouldCaptureSnapshotAfterAction = shouldCaptureSnapshot;
         } else {
-            throw new Error(`Tool ${toolName} could not be handled (no handle method).`);
+          throw new Error(
+            `Tool ${toolName} could not be handled (no handle method).`
+          );
         }
 
         if (actionToRun) {
-            const actionResult = await actionToRun();
-            if (actionResult?.content) {
-                executionResultText = actionResult.content
-                    .map((c: { type: string; text?: string }) => c.type === "text" ? c.text : `[${c.type}]`)
-                    .filter(Boolean)
-                    .join(" ") || `${toolName} action completed.`;
-            } else {
-                executionResultText = `${toolName} action completed successfully.`;
-            }
-            actionSucceeded = true;
+          toolActionOutput = await actionToRun();
+          actionSucceeded = true;
         } else {
-            throw new Error(`Tool ${toolName} handled without action.`);
+          throw new Error(`Tool ${toolName} handled without action.`);
         }
       } catch (error) {
-        process.stderr.write(`${logPrefix} Error executing tool ${toolName}: ${error instanceof Error ? error.message : String(error)}\\n`); // Changed and added newline
-        // --- LOG STACK TRACE ---
+        process.stderr.write(
+          `${logPrefix} Error executing tool ${toolName}: ${
+            error instanceof Error ? error.message : String(error)
+          }\\n`
+        ); 
         if (error instanceof Error && error.stack) {
-          process.stderr.write(`${logPrefix} Stack Trace: ${error.stack}\\n`); 
+          process.stderr.write(`${logPrefix} Stack Trace: ${error.stack}\\n`);
         }
         // -----------------------
         finalResult = this.createErrorResult(
-          `Execution failed: ${error instanceof Error ? error.message : String(error)}`,
+          `Execution failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
           toolName
         );
         actionSucceeded = false;
@@ -465,12 +489,22 @@ export class Context {
           try {
             postActionSnapshot = await this.captureSnapshot();
             if (postActionSnapshot) {
-              process.stderr.write(`[Context.run ${toolName}] Added snapshot to final result text.\n`);
+              process.stderr.write(
+                `[Context.run ${toolName}] Added snapshot to final result text.\n`
+              );
             } else {
-              process.stderr.write(`[Context.run ${toolName}] WARN: Snapshot was expected after action but failed to capture.\n`); // Keep warning
+              process.stderr.write(
+                `[Context.run ${toolName}] WARN: Snapshot was expected after action but failed to capture.\n`
+              ); // Keep warning
             }
           } catch (postSnapError) {
-            process.stderr.write(`[Context.run ${toolName}] WARN: Error capturing post-action snapshot: ${postSnapError instanceof Error ? postSnapError.message : String(postSnapError)}\n`); // Keep warning
+            process.stderr.write(
+              `[Context.run ${toolName}] WARN: Error capturing post-action snapshot: ${
+                postSnapError instanceof Error
+                  ? postSnapError.message
+                  : String(postSnapError)
+              }\n`
+            ); // Keep warning
           }
         } else if (
           actionSucceeded &&
@@ -481,8 +515,20 @@ export class Context {
         }
 
         if (actionSucceeded) {
+          const finalContentItems: (TextContent | ImageContent)[] = [];
+
+          // 1. Add content from the tool action itself
+          if (toolActionOutput?.content && toolActionOutput.content.length > 0) {
+            finalContentItems.push(...toolActionOutput.content);
+          } else {
+            // If toolActionOutput.content is empty/undefined but action succeeded,
+            // provide a generic success message.
+            finalContentItems.push({ type: "text", text: `${toolName} action completed successfully.` });
+          }
+
+          // 2. Prepare and add additional textual information (URL, Title, Snapshot)
+          const additionalInfoParts: string[] = [];
           const currentPage = await this.getActivePage();
-          let finalOutputText = executionResultText; // Start with execution text
 
           if (currentPage) {
             try {
@@ -490,39 +536,56 @@ export class Context {
               const title = await currentPage
                 .title()
                 .catch(() => "[Error retrieving title]");
-              finalOutputText += `\n\n- Page URL: ${url}\n- Page Title: ${title}`;
+              additionalInfoParts.push(`- Page URL: ${url}`);
+              additionalInfoParts.push(`- Page Title: ${title}`);
             } catch (pageStateError) {
-              finalOutputText +=
-                "\n\n- [Error retrieving page state after action]";
+              additionalInfoParts.push(
+                "- [Error retrieving page state after action]"
+              );
             }
           } else {
-            finalOutputText += "\n\n- [Page unavailable after action]";
+            additionalInfoParts.push("- [Page unavailable after action]");
           }
 
           const snapshotToAdd = postActionSnapshot;
           if (snapshotToAdd) {
-            finalOutputText += `\n\n- Page Snapshot\n\`\`\`yaml\n${snapshotToAdd.text()}\n\`\`\`\n`;
+            additionalInfoParts.push(
+              `- Page Snapshot\n\`\`\`yaml\n${snapshotToAdd.text()}\n\`\`\`\n`
+            );
           } else {
-            finalOutputText += `\n\n- [No relevant snapshot available after action]`;
+            additionalInfoParts.push(
+              `- [No relevant snapshot available after action]`
+            );
+          }
+
+          // 3. Add the additional information as a new TextContent item if it's not empty
+          if (additionalInfoParts.length > 0) {
+            // Add leading newlines if there's preceding content, to maintain separation
+            const additionalInfoText = (finalContentItems.length > 0 ? "\\n\\n" : "") + additionalInfoParts.join("\\n");
+            finalContentItems.push({ type: "text", text: additionalInfoText });
           }
 
           finalResult = {
-            content: [{ type: "text", text: finalOutputText }],
+            content: finalContentItems,
             isError: false,
           };
         } else {
           // Error result is already set in catch block, but ensure it IS set.
           if (!finalResult || !finalResult.isError) {
-             finalResult = this.createErrorResult(
-               `Unknown error occurred during ${toolName}`,
-               toolName
-             );
+            finalResult = this.createErrorResult(
+              `Unknown error occurred during ${toolName}`,
+              toolName
+            );
           }
         }
         return finalResult;
       }
     } catch (error) {
-      process.stderr.write(`${logPrefix} Error running tool ${toolName}: ${error instanceof Error ? error.message : String(error)}\n`); 
+      process.stderr.write(
+        `${logPrefix} Error running tool ${toolName}: ${
+          error instanceof Error ? error.message : String(error)
+        }\n`
+      );
       throw error;
     }
   }

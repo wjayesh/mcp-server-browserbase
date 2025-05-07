@@ -29,7 +29,7 @@ async function handleCreateContext(
   params: CreateContextInput
 ): Promise<ToolResult> {
   try {
-    const config = context.getConfig();
+    const config = context.config;
     
     if (!config.browserbaseApiKey || !config.browserbaseProjectId) {
       throw new Error("Browserbase API Key or Project ID is missing in the configuration");
@@ -95,7 +95,7 @@ async function handleDeleteContext(
   params: DeleteContextInput
 ): Promise<ToolResult> {
   try {
-    const config = context.getConfig();
+    const config = context.config;
     
     if (!config.browserbaseApiKey) {
       throw new Error("Browserbase API Key is missing in the configuration");
