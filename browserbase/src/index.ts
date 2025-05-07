@@ -38,12 +38,9 @@ Object.entries(requiredEnvVars).forEach(([name, value]) => {
 
 // const serverVersion = "0.5.1";
 
-export async function createServer(config: Config): Promise<Server> {  
-  // Assume true for captureSnapshot for keyboard, adjust if needed
-  const captureSnapshotFlag = true; 
-
-    // Create the server
-    const server = new Server(
+export async function createServer(config: Config): Promise<Server> {
+  // Create the server
+  const server = new Server(
     { name: "mcp-server-browserbase", version: "0.5.1" },
     {
       capabilities: {
@@ -61,7 +58,7 @@ export async function createServer(config: Config): Promise<Server> {
   const tools: Tool<any>[] = [
     ...common,
     ...snapshot,
-    ...keyboard(captureSnapshotFlag), // Call the function and spread the result array
+    ...keyboard, // Call the function and spread the result array
     // getText,    // Include the tool object directly
     // navigate,   // Include the tool object directly
     // session,    // Include the tool object directly

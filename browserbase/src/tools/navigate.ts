@@ -1,59 +1,122 @@
+/**
+ * Copyright (c) Microsoft Corporation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 import { z } from 'zod';
-import { Page, errors as PlaywrightErrors } from "playwright-core";
-import type { Tool, ToolSchema, ToolContext, ToolResult } from "./tool.js";
-import { createErrorResult, createSuccessResult } from "./toolUtils.js";
-import type { Context } from '../context.js';
+import { defineTool, type ToolFactory } from './tool.js';
 import type { ToolActionResult } from '../context.js';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-// Define Zod schema
-const NavigateInputSchema = z.object({
-    url: z.string().url().describe("URL to navigate to"),
-    sessionId: z.string().optional(),
-});
-type NavigateInput = z.infer<typeof NavigateInputSchema>;
+const navigate: ToolFactory = captureSnapshot => defineTool({
+  capability: 'core',
 
-const navigateSchema: ToolSchema<typeof NavigateInputSchema> = {
-    name: "browserbase_navigate",
-    description: "Navigate the current page to a new URL",
-    inputSchema: NavigateInputSchema,
-};
+  schema: {
+    name: 'browser_navigate',
+    description: 'Navigate to a URL',
+    inputSchema: z.object({
+      url: z.string().describe('The URL to navigate to'),
+    }),
+  },
 
-// Handle function for Navigate
-async function handleNavigate(context: Context, params: NavigateInput): Promise<ToolResult> {
+  handle: async (context, params) => {
+    const page = await context.getActivePage();
+    if (!page) {
+      throw new Error('No active page found for navigate');
+    }
     const action = async (): Promise<ToolActionResult> => {
-        const page = await context.getActivePage();
-        if (!page) {
-            throw new Error('No active page found for navigate');
-        }
-        try {
-            await page.goto(params.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-            return { content: [{ type: 'text', text: `Navigated to ${params.url}` }] };
-        } catch (error) {
-            console.error(`Navigate action failed: ${error}`);
-            throw error; // Rethrow
-        }
+      await page.goto(params.url);
+      return { content: [{ type: 'text', text: `Navigated to ${params.url}` }] };
     };
+
+    const code = [
+      `// Navigate to ${params.url}`,
+      `await page.goto('${params.url}');`,
+    ];
 
     return {
-        action,
-        code: [], // Add code property
-        captureSnapshot: true, // Navigation changes page state
-        waitForNetwork: false, // page.goto handles waiting implicitly
+      action,
+      code,
+      captureSnapshot,
+      waitForNetwork: false,
     };
-}
+  },
+});
 
-// Define tool using handle
-const navigateTool: Tool<typeof NavigateInputSchema> = {
-    capability: 'core', // Add capability
-    schema: navigateSchema,
-    handle: handleNavigate,
-};
+const goBack: ToolFactory = captureSnapshot => defineTool({
+  capability: 'history',
+  schema: {
+    name: 'browserbase_navigate_back',
+    description: 'Go back to the previous page',
+    inputSchema: z.object({}),
+  },
 
-// Export the single tool object as default
-export default [navigateTool]; // Export as an array containing the tool
+  handle: async context => {
+    const page = await context.getActivePage();
+    if (!page) {
+      throw new Error('No active page found for goBack');
+    }
+    const action = async (): Promise<ToolActionResult> => {
+      await page.goBack();
+      return { content: [{ type: 'text', text: 'Navigated back' }] };
+    };
+    const code = [
+      `// Navigate back`,
+      `await page.goBack();`,
+    ];
 
-// If you have multiple navigation tools (back, forward), group them:
-// export const navigationTools: Tool[] = [navigateTool, backTool, forwardTool];
+    return {
+      action,
+      code,
+      captureSnapshot,
+      waitForNetwork: true,
+    };
+  },
+});
 
-// TODO: Add handlers for navigate_back, navigate_forward if needed 
+const goForward: ToolFactory = captureSnapshot => defineTool({
+  capability: 'history',
+  schema: {
+    name: 'browserbase_navigate_forward',
+    description: 'Go forward to the next page',
+    inputSchema: z.object({}),
+  },
+  handle: async context => {
+    const page = await context.getActivePage();
+    if (!page) {
+      throw new Error('No active page found for goForward');
+    }
+    const action = async (): Promise<ToolActionResult> => {
+      await page.goForward();
+      return { content: [{ type: 'text', text: 'Navigated forward' }] };
+    };
+    const code = [
+      `// Navigate forward`,
+      `await page.goForward();`,
+    ];
+    return {
+      action,
+      code,
+      captureSnapshot,
+      waitForNetwork: true,
+    };
+  },
+});
+
+const captureSnapshotValue = true;
+
+export default [
+  navigate(captureSnapshotValue),
+  goBack(captureSnapshotValue),
+  goForward(captureSnapshotValue),
+]; 

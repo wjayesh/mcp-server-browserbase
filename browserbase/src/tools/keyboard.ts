@@ -104,7 +104,8 @@ const pressKey: ToolFactory = captureSnapshot => defineTool({
   },
 });
 
-// Changed export to match the factory pattern
-export default (captureSnapshot: boolean) => [
-  pressKey(captureSnapshot),
+const captureSnapshotValue = true;
+
+export default [
+  pressKey(captureSnapshotValue),
 ]; 
