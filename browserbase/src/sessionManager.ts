@@ -4,27 +4,15 @@ import {
   Page,
 } from "playwright-core";
 import { Browserbase } from "@browserbasehq/sdk";
-import type { Config } from "./config.js"; // Import Config type
+import type { Config } from "./config.js"; 
 import { SessionCreateParams } from "@browserbasehq/sdk/src/resources/sessions/sessions.js";
-// import { Writable } from "stream"; // Import Writable for process.stderr
 import type { Cookie } from "playwright-core";
+
 // Define the type for a session object
 export type BrowserSession = {
   browser: Browser;
   page: Page;
   sessionId: string;
-};
-
-// Type for session creation options
-type SessionCreationOptions = {
-  projectId: string;
-  browserSettings?: {
-    context?: {
-      id: string;
-      persist: boolean;
-    };
-  };
-  // Add other potential Browserbase session options here if needed
 };
 
 // Global state for managing browser sessions
