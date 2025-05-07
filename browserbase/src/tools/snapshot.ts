@@ -240,6 +240,7 @@ const typeSchema = elementSchema.extend({
   slowly: z
     .boolean()
     .optional()
+    .default(true)
     .describe("Whether to type one character at a time."),
 });
 type TypeInput = z.infer<typeof typeSchema>;
@@ -269,7 +270,7 @@ const type = defineTool<typeof typeSchema>({
         )}.pressSequentially('${params.text.replace(/'/g, "\\'")}');`
       );
       steps.push(() =>
-        locator.pressSequentially(params.text, { delay: 100, timeout: 5000 })
+        locator.pressSequentially(params.text, { delay: 50 }) 
       );
     } else {
       code.push(`// Fill "${params.text}" into "${params.element}"`);
@@ -279,8 +280,8 @@ const type = defineTool<typeof typeSchema>({
         )}.fill('${params.text.replace(/'/g, "\\'")}');`
       );
       steps.push(async () => {
-        await locator.waitFor({ state: "visible", timeout: 5000 });
-        if (!(await locator.isEditable({ timeout: 2000 }))) {
+        await locator.waitFor({ state: "visible"});
+        if (!(await locator.isEditable())) {
           throw new Error(
             `Element '${params.element}' was visible but not editable.`
           );
