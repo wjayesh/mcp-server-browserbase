@@ -1,53 +1,50 @@
 # Smithery configuration file: https://smithery.ai/docs/config#smitheryyaml
 
-# startCommand:
-#   # Using stdio type which is the most common for MCPs
-#   type: stdio
-#   configSchema:
-#     # JSON Schema defining the configuration options for the MCP.
-#     type: object
-#     required:
-#       - browserbaseApiKey
-#       - browserbaseProjectId
-#     properties:
-#       browserbaseApiKey:
-#         type: string
-#         description: The API key for Browserbase.
-#       browserbaseProjectId:
-#         type: string
-#         description: The project ID for Browserbase.
-#   commandFunction: |
-#     config => ({
-#       command: 'node',
-
-#       env: {
-#         BROWSERBASE_API_KEY: config.browserbaseApiKey,
-#         BROWSERBASE_PROJECT_ID: config.browserbaseProjectId
-#       }
-#     })
-
 startCommand:
-  type: http
+  # Using stdio type which is the most common for MCPs
+  type: stdio
   configSchema:
+    # JSON Schema defining the configuration options for the MCP.
     type: object
     required:
-      - port
       - browserbaseApiKey
       - browserbaseProjectId
+      - port
+      - host
+      - contextId
+      - persist
+      - proxies
+      - cookies
     properties:
-      port:
-        type: number
-        description: The port to listen on.
       browserbaseApiKey:
         type: string
         description: The API key for Browserbase.
       browserbaseProjectId:
         type: string
         description: The project ID for Browserbase.
+      port:
+        type: number
+        description: The port to listen on.
+      host:
+        type: string
+        description: The host to listen on.
+      contextId:
+        type: string
+        description: The context ID to use for the session.
+      persist:
+        type: boolean
+        description: Whether to persist the context.
+      proxies:
+        type: boolean
+        description: Whether to use proxies.
+      cookies:
+        type: json
+        description: Cookies to use for the session.
+      
   commandFunction: |
     config => ({
       command: 'node',
-      args: ['cli.js', '--port', config.port.toString()],
+      args: ['cli.js']
       env: {
         BROWSERBASE_API_KEY: config.browserbaseApiKey,
         BROWSERBASE_PROJECT_ID: config.browserbaseProjectId
