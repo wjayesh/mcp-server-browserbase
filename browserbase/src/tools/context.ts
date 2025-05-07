@@ -28,42 +28,16 @@ async function handleCreateContext(
   context: Context,
   params: CreateContextInput
 ): Promise<ToolResult> {
-  const action = async (): Promise<ToolActionResult> => {
-    try {
-      const config = context.config;
-      
-      if (!config.browserbaseApiKey || !config.browserbaseProjectId) {
-        throw new Error("Browserbase API Key or Project ID is missing in the configuration");
-      }
-      
-      const bb = new Browserbase({
-        apiKey: config.browserbaseApiKey,
-      });
-
-      console.error("Creating new Browserbase context");
-      const bbContext = await bb.contexts.create({
-        projectId: config.browserbaseProjectId,
-      });
-
-      console.error(`Successfully created context: ${bbContext.id}`);
-      
-      // Store context ID with optional name if provided
-      const contextName = params.name || bbContext.id;
-      contexts.set(contextName, bbContext.id);
-      
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Created new Browserbase context with ID: ${bbContext.id}${params.name ? ` and name: ${params.name}` : ''}`,
-          },
-        ],
-      };
-    } catch (error: any) {
-      console.error(`CreateContext handle failed: ${error.message || error}`);
-      throw new Error(`Failed to create Browserbase context: ${error.message || error}`);
+  try {
+    const config = context.config;
+    
+    if (!config.browserbaseApiKey || !config.browserbaseProjectId) {
+      throw new Error("Browserbase API Key or Project ID is missing in the configuration");
     }
-  };
+    
+    const bb = new Browserbase({
+      apiKey: config.browserbaseApiKey,
+    });
 
     console.error("Creating new Browserbase context");
     const bbContext = await bb.contexts.create({
@@ -124,70 +98,64 @@ async function handleDeleteContext(
   context: Context,
   params: DeleteContextInput
 ): Promise<ToolResult> {
-  const action = async (): Promise<ToolActionResult> => {
-    try {
-      const config = context.config;
-      
-      if (!config.browserbaseApiKey) {
-        throw new Error("Browserbase API Key is missing in the configuration");
-      }
-      
-      if (!params.contextId && !params.name) {
-        throw new Error("Missing required argument: either contextId or name must be provided");
-      }
-
-      // Resolve context ID either directly or by name
-      let contextId = params.contextId;
-      if (!contextId && params.name) {
-        contextId = contexts.get(params.name);
-        if (!contextId) {
-          throw new Error(`Context with name "${params.name}" not found`);
-        }
-      }
-
-      console.error(`Deleting Browserbase context: ${contextId}`);
-      
-      // Delete from Browserbase API
-      // The SDK may not have a delete method directly, so we use the REST API
-      const response = await fetch(`https://api.browserbase.com/v1/contexts/${contextId}`, {
-        method: 'DELETE',
-        headers: {
-          'X-BB-API-Key': config.browserbaseApiKey,
-        },
-      });
-      
-      if (response.status !== 204) {
-        const errorText = await response.text();
-        throw new Error(`Failed to delete context with status ${response.status}: ${errorText}`);
-      }
-      
-      // Remove from local store
-      if (params.name) {
-        contexts.delete(params.name);
-      }
-      
-      // Delete by ID too (in case it was stored multiple ways)
-      for (const [name, id] of contexts.entries()) {
-        if (id === contextId) {
-          contexts.delete(name);
-        }
-      }
-      
-      console.error(`Successfully deleted context: ${contextId}`);
-      
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Deleted Browserbase context with ID: ${contextId}`,
-          },
-        ],
-      };
-    } catch (error: any) {
-      console.error(`DeleteContext handle failed: ${error.message || error}`);
-      throw new Error(`Failed to delete Browserbase context: ${error.message || error}`);
+  try {
+    const config = context.config;
+    
+    if (!config.browserbaseApiKey) {
+      throw new Error("Browserbase API Key is missing in the configuration");
     }
-  };
+    
+    if (!params.contextId && !params.name) {
+      throw new Error("Missing required argument: either contextId or name must be provided");
+    }
+
+    // Resolve context ID either directly or by name
+    let contextId = params.contextId;
+    if (!contextId && params.name) {
+      contextId = contexts.get(params.name);
+      if (!contextId) {
+        throw new Error(`Context with name "${params.name}" not found`);
+      }
+    }
+
+    console.error(`Deleting Browserbase context: ${contextId}`);
+    
+    // Delete from Browserbase API
+    // The SDK may not have a delete method directly, so we use the REST API
+    const response = await fetch(`https://api.browserbase.com/v1/contexts/${contextId}`, {
+      method: 'DELETE',
+      headers: {
+        'X-BB-API-Key': config.browserbaseApiKey,
+      },
+    });
+    
+    if (response.status !== 204) {
+      const errorText = await response.text();
+      throw new Error(`Failed to delete context with status ${response.status}: ${errorText}`);
+    }
+    
+    // Remove from local store
+    if (params.name) {
+      contexts.delete(params.name);
+    }
+    
+    // Delete by ID too (in case it was stored multiple ways)
+    for (const [name, id] of contexts.entries()) {
+      if (id === contextId) {
+        contexts.delete(name);
+      }
+    }
+    
+    console.error(`Successfully deleted context: ${contextId}`);
+    
+    const result: ToolActionResult = {
+      content: [
+        {
+          type: "text",
+          text: `Deleted Browserbase context with ID: ${contextId}`,
+        },
+      ],
+    };
 
     return {
       resultOverride: result,

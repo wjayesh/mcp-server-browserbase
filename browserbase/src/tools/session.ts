@@ -95,7 +95,6 @@ async function handleCreateSession(
     }
   };
 
-<<<<<<< HEAD
   // Return the ToolResult structure expected by Context.run
   return {
     action: action, 
@@ -103,45 +102,6 @@ async function handleCreateSession(
     code: [],  
     waitForNetwork: false, 
   };
-=======
-
-    // Check if session creation/retrieval was successful
-    if (!session || !session.browser || !session.page) {
-      throw new Error(`SessionManager failed to return a valid session object for ID: ${targetSessionId}`);
-    }
-
-    // Update context's current session ID to the one we targeted
-    context.currentSessionId = targetSessionId;
-    // console.error(`Successfully ensured session and set active ID: ${targetSessionId}`); // CHANGED to console.log or removed. Let's remove for now.
-
-    // Prepare the result
-    const result: ToolActionResult = {
-      content: [
-        {
-          type: "text",
-          text: `Created and set active Browserbase session ID: ${targetSessionId}`,
-        },
-      ],
-    };
-
-    return {
-      resultOverride: result,
-      action: async () => {
-        console.error("Create Session action");
-        return result;
-      },
-      code: [],
-      captureSnapshot: false, // No page state change yet
-      waitForNetwork: false,
-    };
-  } catch (error: any) {
-    console.error(`CreateSession handle failed: ${error.message || error}`);
-    // Re-throw the error so the main run function in context.ts can handle it
-    throw new Error(
-      `Failed to create Browserbase session: ${error.message || error}`
-    );
-  }
->>>>>>> d2b3800 (fixing flags + adding to readme + config add cookies support)
 }
 
 // Define tool using handle
