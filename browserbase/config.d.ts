@@ -33,6 +33,19 @@ export type Config = {
         persist?: boolean;
     };
     /**
+     * 
+     */
+    viewPort?: {
+        /**
+         * The width of the browser
+         */
+        browserWidth?: number;
+        /**
+         * The height of the browser
+         */
+        browserHeight?: number;
+    };
+    /**
      * Cookies to inject into the Browserbase context
      * Format: Array of cookie objects with name, value, domain, and optional path, expires, httpOnly, secure, sameSite
      */

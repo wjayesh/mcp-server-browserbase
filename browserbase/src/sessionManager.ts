@@ -93,8 +93,8 @@ export async function createNewBrowserSession(
     proxies: config.proxies, 
     browserSettings: {
       viewport: { // better for snapshots
-        width: 1024,
-        height: 768,
+        width: config.viewPort?.browserWidth,
+        height: config.viewPort?.browserHeight,
       },
     },
   };
