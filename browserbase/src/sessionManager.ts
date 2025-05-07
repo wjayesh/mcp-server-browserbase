@@ -73,7 +73,7 @@ export async function addCookiesToContext(context: any, cookies: Cookie[]): Prom
 // Function to create a new Browserbase session and connect Playwright
 export async function createNewBrowserSession(
   newSessionId: string,
-  config: Config, // Accept config object
+  config: Config, 
 ): Promise<BrowserSession> {
   if (!config.browserbaseApiKey) {
     throw new Error("Browserbase API Key is missing in the configuration.");
@@ -92,23 +92,16 @@ export async function createNewBrowserSession(
     projectId: config.browserbaseProjectId!,
     proxies: config.proxies, 
     browserSettings: {
-      viewport: { // better for snapshots
+      ...(config.viewPort ? { viewport: { 
         width: config.viewPort?.browserWidth,
         height: config.viewPort?.browserHeight,
-      },
+      }} : {}),
+      ...(config.context?.contextId ? { context: {
+        id: config.context?.contextId,
+        persist: config.context?.persist ?? true, // Default to true if not specified
+      }} : {})
     },
   };
-
-  console.error("config.context", config.context);
-  // Add context settings if provided
-  if (config.context?.contextId) {
-    sessionOptions.browserSettings = {
-      context: {
-        id: config.context.contextId,
-        persist: config.context.persist || true, // Default to true if not specified
-      },
-    };
-  }
 
   try {
     process.stderr.write(

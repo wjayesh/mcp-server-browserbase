@@ -20,7 +20,8 @@ program
     .option('--port <port>', 'Port to listen on for SSE transport.')
     .option('--host <host>', 'Host to bind server to. Default is localhost. Use 0.0.0.0 to bind to all interfaces.')
     .option('--cookies [json]', 'JSON array of cookies to inject into the browser. Format: [{"name":"cookie1","value":"val1","domain":"example.com"}, ...]')
-    .option('--viewPort [json]', 'ViewPort to use for the browser. Format: {"browserWidth":1024,"browserHeight":768}')
+    .option('--browserWidth <width>', 'Browser width to use for the browser.')
+    .option('--browserHeight <height>', 'Browser height to use for the browser.')
     .action(async options => {
       const config = await resolveConfig(options);
       const serverList = new ServerList(async() => createServer(config));

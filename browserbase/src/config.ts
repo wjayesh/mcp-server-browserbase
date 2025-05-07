@@ -35,10 +35,8 @@ export type CLIOptions = {
   port?: number;
   host?: string;
   cookies?: Cookie[];
-  viewPort?: {
-    browserWidth?: number;
-    browserHeight?: number;
-  };
+  browserWidth?: number;
+  browserHeight?: number;
 };
 
 // Default Configuration Values
@@ -103,8 +101,8 @@ export async function configFromCLIOptions(cliOptions: CLIOptions): Promise<Conf
       persist: cliOptions.persist,
     },
     viewPort: {
-      browserWidth: cliOptions.viewPort?.browserWidth,
-      browserHeight: cliOptions.viewPort?.browserHeight,
+      browserWidth: cliOptions.browserWidth,
+      browserHeight: cliOptions.browserHeight,
     },
     cookies: cliOptions.cookies,
   };
