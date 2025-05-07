@@ -22,7 +22,7 @@ const navigate: ToolFactory = captureSnapshot => defineTool({
   capability: 'core',
 
   schema: {
-    name: 'browser_navigate',
+    name: 'browserbase_navigate',
     description: 'Navigate to a URL',
     inputSchema: z.object({
       url: z.string().describe('The URL to navigate to'),

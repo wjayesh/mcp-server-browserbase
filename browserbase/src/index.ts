@@ -55,13 +55,10 @@ export async function createServer(config: Config): Promise<Server> {
   const tools: Tool<any>[] = [
     ...common,
     ...snapshot,
-    ...keyboard, // Call the function and spread the result array
-    // getText,    // Include the tool object directly
-    // navigate,   // Include the tool object directly
-    // session,    // Include the tool object directly
-    ...getText,    // Spread the array exported by getText.ts
-    ...navigate,   // Spread the array exported by navigate.ts
-    session,       // Add the single tool object directly
+    ...keyboard,
+    ...getText,
+    ...navigate,
+    ...session,
     ...contextTools,
     ...cookies,
   ];

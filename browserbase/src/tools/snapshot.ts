@@ -487,7 +487,7 @@ const screenshot = defineTool<typeof screenshotSchema>({
     const action = async (): Promise<ToolActionResult> => {
       // Access config via context.config
       const includeBase64 =
-        !context.config.tools?.browser_take_screenshot?.omitBase64;
+        !context.config.tools?.browserbase_take_screenshot?.omitBase64;
 
       // Use the page directly for full page screenshots if locator is null
       const screenshotBuffer = locator
