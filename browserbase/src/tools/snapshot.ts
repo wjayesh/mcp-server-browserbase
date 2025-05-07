@@ -41,7 +41,7 @@ const snapshot = defineTool<typeof SnapshotInputSchema>({
   schema: {
     name: "browserbase_snapshot",
     description:
-      "Capture a new accessibility snapshot of the current page state.",
+      "Capture a new accessibility snapshot of the current page state. Use this if the page has changed to ensure subsequent actions use an up-to-date page representation.",
     inputSchema: SnapshotInputSchema,
   },
 
@@ -467,7 +467,8 @@ const screenshot = defineTool<typeof screenshotSchema>({
     );
 
     // Conditionally get locator only if ref and snapshot are available
-    const locator = params.ref && pageSnapshot ? pageSnapshot.refLocator(params.ref) : null;
+    const locator =
+      params.ref && pageSnapshot ? pageSnapshot.refLocator(params.ref) : null;
 
     // Use JSON.stringify for code generation as javascript.formatObject is not available
     const optionsForCode = { ...options };
