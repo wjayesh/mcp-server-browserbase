@@ -14,36 +14,36 @@ The Model Context Protocol (MCP) is an open protocol that enables seamless integ
 
 You can either use our Server hosted on NPM or run it completely locally by cloning this repo. 
 
-#### To run on NPM (Recommended)
+### To run on NPM (Recommended)
 
 Go into your MCP Config JSON and add the Browserbase Server:
 
 ```json
-   {
-      "mcpServers": {
-         "browserbase": {
-            "command": "npx",
-            "args" : ["@browserbasehq/mcp-server-browserbase"],
-            "env": {
-               "BROWSERBASE_API_KEY": "",
-               "BROWSERBASE_PROJECT_ID": ""
-            }
+{
+   "mcpServers": {
+      "browserbase": {
+         "command": "npx",
+         "args" : ["@browserbasehq/mcp-server-browserbase"],
+         "env": {
+            "BROWSERBASE_API_KEY": "",
+            "BROWSERBASE_PROJECT_ID": ""
          }
       }
    }
+}
 ```
 
 Thats it! Reload your MCP client and Claude will be able to use Browserbase. 
 
-#### To run 100% local: 
+### To run 100% local: 
 
 ```bash
-   # Clone the Repo 
-   git clone https://github.com/browserbase/mcp-server-browserbase.git
+# Clone the Repo 
+git clone https://github.com/browserbase/mcp-server-browserbase.git
 
-   # Install the dependencies in the proper directory and build the project
-   cd browserbase
-   npm install && npm run build
+# Install the dependencies in the proper directory and build the project
+cd browserbase
+npm install && npm run build
 
 ```
 
@@ -54,18 +54,18 @@ Then in your MCP Config JSON run the server. To run locally we can use STDIO or 
 To your MCP Config JSON file add the following: 
 
 ```json
-   {
-   "mcpServers": {
-      "browserbase": {
-         "command" : "node",
-         "args" : ["/path/to/mcp-server-browserbase/browserbase/cli.js"],
-         "env": {
-            "BROWSERBASE_API_KEY": "",
-            "BROWSERBASE_PROJECT_ID": ""
-            }
+{
+"mcpServers": {
+   "browserbase": {
+      "command" : "node",
+      "args" : ["/path/to/mcp-server-browserbase/browserbase/cli.js"],
+      "env": {
+         "BROWSERBASE_API_KEY": "",
+         "BROWSERBASE_PROJECT_ID": ""
          }
       }
    }
+}
 ```
 
 ### SSE: 
@@ -128,19 +128,18 @@ Here are our docs on [Proxies](https://docs.browserbase.com/features/proxies).
 To use proxies in STDIO, set the --proxies flag in your MCP Config:
 
 ```json
-   {
-      "mcpServers": {
-         "browserbase": {
-            "command" : "npx",
-            "args" : ["@browserbasehq/mcp-server-browserbase", "--proxies"],
-            "env": {
-               "BROWSERBASE_API_KEY": "",
-               "BROWSERBASE_PROJECT_ID": ""
-            }
+{
+   "mcpServers": {
+      "browserbase": {
+         "command" : "npx",
+         "args" : ["@browserbasehq/mcp-server-browserbase", "--proxies"],
+         "env": {
+            "BROWSERBASE_API_KEY": "",
+            "BROWSERBASE_PROJECT_ID": ""
          }
       }
    }
-
+}
 ```
 
 ### Contexts
@@ -150,19 +149,18 @@ Here are our docs on [Contexts](https://docs.browserbase.com/features/contexts)
 To use contexts in STDIO, set the --contextId flag in your MCP Config:
 
 ```json
-   {
-      "mcpServers": {
-         "browserbase": {
-            "command" : "npx",
-            "args" : ["@browserbasehq/mcp-server-browserbase", "--contextId", "<YOUR_CONTEXT_ID>"],
-            "env": {
-               "BROWSERBASE_API_KEY": "",
-               "BROWSERBASE_PROJECT_ID": ""
-            }
+{
+   "mcpServers": {
+      "browserbase": {
+         "command" : "npx",
+         "args" : ["@browserbasehq/mcp-server-browserbase", "--contextId", "<YOUR_CONTEXT_ID>"],
+         "env": {
+            "BROWSERBASE_API_KEY": "",
+            "BROWSERBASE_PROJECT_ID": ""
          }
       }
    }
-
+}
 ```
 
 ### Cookie Injection
@@ -174,23 +172,23 @@ You can flag cookies into the MCP by adding the cookies.json to your MCP Config.
 To use proxies in STDIO, set the --proxies flag in your MCP Config. Your cookies JSON must be in the type of [Playwright Cookies](https://playwright.dev/docs/api/class-browsercontext#browser-context-cookies)
 
 ```json
-   {
-      "mcpServers": {
-         "browserbase" {
-            "command" : "npx",
-            "args" : [
-               "@browserbasehq/mcp-server-browserbase", "--cookies", 
-               '{
-                  "cookies": json,
-               }'
-            ],
-            "env": {
-               "BROWSERBASE_API_KEY": "",
-               "BROWSERBASE_PROJECT_ID": ""
-            }
+{
+   "mcpServers": {
+      "browserbase" {
+         "command" : "npx",
+         "args" : [
+            "@browserbasehq/mcp-server-browserbase", "--cookies", 
+            '{
+               "cookies": json,
+            }'
+         ],
+         "env": {
+            "BROWSERBASE_API_KEY": "",
+            "BROWSERBASE_PROJECT_ID": ""
          }
       }
    }
+}
 ```
 
 ### Browser Viewport Sizing 
@@ -200,22 +198,22 @@ The default viewport sizing for a browser session is 1024 x 768. You can adjust 
 Here's how to use it for custom browser sizing. We recommend to stick with 16:9 aspect ratios (ie: 1920 x 1080, 1280, 720, 1024 x 768)
 
 ```json
-   {
-      "mcpServers": {
-         "browserbase": {
-            "command" : "npx",
-            "args" : [
-               "@browserbasehq/mcp-server-browserbase",
-               "--browserHeight 1080",
-               "--browserWidth 1920",
-            ],
-            "env": {
-               "BROWSERBASE_API_KEY": "",
-               "BROWSERBASE_PROJECT_ID": ""
-            }
+{
+   "mcpServers": {
+      "browserbase": {
+         "command" : "npx",
+         "args" : [
+            "@browserbasehq/mcp-server-browserbase",
+            "--browserHeight 1080",
+            "--browserWidth 1920",
+         ],
+         "env": {
+            "BROWSERBASE_API_KEY": "",
+            "BROWSERBASE_PROJECT_ID": ""
          }
       }
    }
+}
 ```
 
 ## Structure
