@@ -1,110 +1,261 @@
-# Browserbase MCP Server
+# Playwright Browserbase MCP Server
 
-![cover](../assets/browserbase-mcp.png)
+A Model Context Protocol server that uses Playwright and Browserbase
+to provide browser automation tools.
 
-## Get Started
+## Setup
 
-1. Run `npm install` to install the necessary dependencies, then run `npm run build` to get `dist/index.js`.
+1.  Install dependencies:
+    ```bash
+    npm install
+    ```
+2.  Set environment variables (e.g., in a `.env` file):
+    *   `BROWSERBASE_API_KEY`: Your Browserbase API key.
+    *   `BROWSERBASE_PROJECT_ID`: Your Browserbase project ID.
+3.  Compile TypeScript:
+    ```bash
+    npm run build
+    ```
 
-2. Set up your Claude Desktop configuration to use the server.  
+## How to setup in MCP json
+
+```json
+   {
+      "mcpServers": {
+         "browserbase": {
+            "url": "http://localhost:8931/sse",
+            "env": {
+               "BROWSERBASE_API_KEY": "",
+               "BROWSERBASE_PROJECT_ID": ""
+            }
+         }
+      }
+   }
+```
+
+## Local Dev
+
+To run locally we can use STDIO or self-host over SSE. 
+
+### STDIO: 
+
+To your MCP Config JSON file add the following: 
 
 ```json
 {
   "mcpServers": {
-    "browserbase": {
-      "command": "node",
-      "args": ["path/to/mcp-server-browserbase/browserbase/dist/index.js"],
+    "playwright": {
+      "command" : "node",
+      "args" : ["/path/to/mcp-server-browserbase/browserbase/cli.js"],
       "env": {
-        "BROWSERBASE_API_KEY": "<YOUR_BROWSERBASE_API_KEY>",
-        "BROWSERBASE_PROJECT_ID": "<YOUR_BROWSERBASE_PROJECT_ID>"
+        "BROWSERBASE_API_KEY": "",
+        "BROWSERBASE_PROJECT_ID": ""
       }
     }
   }
 }
 ```
 
-3. Restart your Claude Desktop app and you should see the tools available clicking the 🔨 icon.
+### SSE: 
 
-4. Start using the tools! Below is an image of Claude closing a browser session.
+```bash
+   node cli.js --port 8931
+```
 
-<p align="center">
-  <img src="../assets/browserbase-demo.png" alt="demo" width="600"/>
-</p>
+From here you should be able to put the url as "http://localhost:8931/sse" in the config.json
 
+## Flags Explained:
 
-## Tools
+The Browserbase MCP server accepts the following command-line flags:
 
-### Browserbase API
+| Flag | Description |
+|------|-------------|
+| `--browserbaseApiKey <key>` | Your Browserbase API key for authentication |
+| `--browserbaseProjectId <id>` | Your Browserbase project ID |
+| `--proxies` | Enable Browserbase proxies for the session |
+| `--contextId <contextId>` | Specify a Browserbase Context ID to use |
+| `--persist [boolean]` | Whether to persist the Browserbase context (default: true) |
+| `--port <port>` | Port to listen on for HTTP/SSE transport |
+| `--host <host>` | Host to bind server to (default: localhost, use 0.0.0.0 for all interfaces) |
+| `--cookies [json]` | JSON array of cookies to inject into the browser |
+| `--browserWidth <width>` | Browser viewport width (default: 1024) |
+| `--browserHeight <height>` | Browser viewport height (default: 768) |
 
-- **browserbase_create_session**
+These flags can be passed directly to the CLI or configured in your MCP configuration file.
 
-  - Create a new cloud browser session using Browserbase
-  - No required inputs
+Currently, these flags can only be used with the local server (npx @browserbasehq/mcp-server-browserbase). 
 
-- **browserbase_navigate**
+____
 
-  - Navigate to any URL in the browser
-  - Input: `url` (string)
+## Flags & Example Configs
 
-- **browserbase_screenshot**
+### Proxies
 
-  - Capture screenshots of the entire page or specific elements
-  - Inputs:
-    - `name` (string, required): Name for the screenshot
-    - `selector` (string, optional): CSS selector for element to screenshot
-    - `width` (number, optional, default: 800): Screenshot width
-    - `height` (number, optional, default: 600): Screenshot height
+Here are our docs on [Proxies](https://docs.browserbase.com/features/proxies).
 
-- **browserbase_click**
+To use proxies in STDIO, set the --proxies flag in your MCP Config
 
-  - Click elements on the page
-  - Input: `selector` (string): CSS selector for element to click
+```json
+   {
+      "mcpServers": {
+         "playwright": {
+            "command" : "npx",
+            "args" : ["@browserbasehq/mcp-server-browserbase", "--proxies"],
+            "env": {
+               "BROWSERBASE_API_KEY": "",
+               "BROWSERBASE_PROJECT_ID": ""
+            }
+         }
+      }
+   }
 
-- **browserbase_fill**
+```
 
-  - Fill out input fields
-  - Inputs:
-    - `selector` (string): CSS selector for input field
-    - `value` (string): Value to fill
+### Contexts
 
-- **browserbase_evaluate**
+Here are our docs on [Contexts](https://docs.browserbase.com/features/contexts)
 
-  - Execute JavaScript in the browser console
-  - Input: `script` (string): JavaScript code to execute
+To use proxies in STDIO, set the --proxies flag in your MCP Config
 
-- **browserbase_get_content**
+```json
+   {
+      "mcpServers": {
+         "playwright": {
+            "command" : "npx",
+            "args" : ["@browserbasehq/mcp-server-browserbase", "--contextId", "<YOUR_CONTEXT_ID>"],
+            "env": {
+               "BROWSERBASE_API_KEY": "",
+               "BROWSERBASE_PROJECT_ID": ""
+            }
+         }
+      }
+   }
 
-  - Extract all content from the current page
-  - Input: `selector` (string, optional): CSS selector to get content from specific elements
+```
 
-- **browserbase_parallel_sessions**
-  - Create multiple browser sessions and navigate to different URLs
-  - Input: `sessions` (array): Array of objects containing:
-    - `url` (string): URL to navigate to
-    - `id` (string): Session identifier
+### Cookie Injection
 
-### Resources
+Why would you need to inject cookies? Our context API currently works on persistent cookies, but not session cookies. So sometimes our persistent auth might not work (we're working hard to add this functionality). 
 
-The server provides access to two types of resources:
+You can flag cookies into the MCP by adding the cookies.json to your MCP Config.
 
-1. **Console Logs** (`console://logs`)
+To use proxies in STDIO, set the --proxies flag in your MCP Config. Your cookies JSON must be in the type of [Playwright Cookies](https://playwright.dev/docs/api/class-browsercontext#browser-context-cookies)
 
-   - Browser console output in text format
-   - Includes all console messages from the browser
+```json
+   {
+      "mcpServers": {
+         "playwright": {
+            "command" : "npx",
+            "args" : [
+               "@browserbasehq/mcp-server-browserbase", "cookies", 
+               "{
+                  COOKIES JSON IN TYPE OF PLAYWRIGHT COOKIES
+               }"
+            ],
+            "env": {
+               "BROWSERBASE_API_KEY": "",
+               "BROWSERBASE_PROJECT_ID": ""
+            }
+         }
+      }
+   }
+```
 
-2. **Screenshots** (`screenshot://<name>`)
-   - PNG images of captured screenshots
-   - Accessible via the screenshot name specified during capture
+### Browser Viewport Sizing 
 
-## Key Features
+The default viewport sizing for a browser session is 1024 x 768. You can adjust the Browser viewport sizing with browserWidth and browserHeight flags. 
 
-- Cloud browser automation
-- Web data extraction
-- Console log monitoring
-- Screenshot capabilities
-- JavaScript execution
-- Basic web interaction (navigation, clicking, form filling)
+Here's how to use it for custom browser sizing. We recommend to stick with 16:9 aspect ratios (ie: 1920 x 1080, 1280, 720, 1024 x 768)
 
-## License
+```json
+   {
+      "mcpServers": {
+         "playwright": {
+            "command" : "npx",
+            "args" : [
+               "@browserbasehq/mcp-server-browserbase",
+               "--browserHeight" : 1080,
+               "--browserWidth" : 1920,
+            ],
+            "env": {
+               "BROWSERBASE_API_KEY": "",
+               "BROWSERBASE_PROJECT_ID": ""
+            }
+         }
+      }
+   }
+```
 
-This MCP server is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License. For more details, please see the LICENSE file in the project repository.
+## Structure
+
+*   `src/`: TypeScript source code
+    *   `index.ts`: Main entry point, env checks, shutdown
+    *   `server.ts`: MCP Server setup and request routing
+    *   `sessionManager.ts`: Handles Browserbase session creation/management
+    *   `tools/`: Tool definitions and implementations
+    *   `resources/`: Resource (screenshot) handling
+    *   `types.ts`: Shared TypeScript types
+*   `dist/`: Compiled JavaScript output
+*   `tests/`: Placeholder for tests
+*   `utils/`: Placeholder for utility scripts
+*   `Dockerfile`: For building a Docker image
+*   Configuration files (`.json`, `.ts`, `.mjs`, `.npmignore`)
+
+## Contexts for Persistence
+
+This server supports Browserbase's Contexts feature, which allows persisting cookies, authentication, and cached data across browser sessions:
+
+1. **Creating a Context**:
+   ```
+   browserbase_context_create: Creates a new context, optionally with a friendly name
+   ```
+
+2. **Using a Context with a Session**:
+   ```
+   browserbase_session_create: Now accepts a 'context' parameter with:
+     - id: The context ID to use
+     - name: Alternative to ID, the friendly name of the context
+     - persist: Whether to save changes (cookies, cache) back to the context (default: true)
+   ```
+
+3. **Deleting a Context**:
+   ```
+   browserbase_context_delete: Deletes a context when you no longer need it
+   ```
+
+Contexts make it much easier to:
+- Maintain login state across sessions
+- Reduce page load times by preserving cache
+- Avoid CAPTCHAs and detection by reusing browser fingerprints
+
+## Cookie Management
+
+This server also provides direct cookie management capabilities:
+
+1. **Adding Cookies**:
+   ```
+   browserbase_cookies_add: Add cookies to the current browser session with full control over properties
+   ```
+
+2. **Getting Cookies**:
+   ```
+   browserbase_cookies_get: View all cookies in the current session (optionally filtered by URLs)
+   ```
+
+3. **Deleting Cookies**:
+   ```
+   browserbase_cookies_delete: Delete specific cookies or clear all cookies from the session
+   ```
+
+These tools are useful for:
+- Setting authentication cookies without navigating to login pages
+- Backing up and restoring cookie state
+- Debugging cookie-related issues
+- Manipulating cookie attributes (expiration, security flags, etc.)
+
+## TODO
+
+*   Implement true `ref`-based interaction logic for click, type, drag, hover, select_option.
+*   Implement element-specific screenshots using `ref`.
+*   Add more standard Playwright MCP tools (tabs, navigation, etc.).
+*   Add tests.

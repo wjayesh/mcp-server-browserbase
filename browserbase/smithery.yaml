@@ -1,0 +1,52 @@
+# Smithery configuration file: https://smithery.ai/docs/config#smitheryyaml
+
+startCommand:
+  # Using stdio type which is the most common for MCPs
+  type: stdio
+  configSchema:
+    # JSON Schema defining the configuration options for the MCP.
+    type: object
+    required:
+      - browserbaseApiKey
+      - browserbaseProjectId
+    properties:
+      browserbaseApiKey:
+        type: string
+        description: The API key for Browserbase.
+      browserbaseProjectId:
+        type: string
+        description: The project ID for Browserbase.
+      port:
+        type: number
+        description: The port to listen on.
+      host:
+        type: string
+        description: The host to listen on.
+      contextId:
+        type: string
+        description: The context ID to use for the session.
+      persist:
+        type: boolean
+        description: Whether to persist the context.
+      proxies:
+        type: boolean
+        description: Whether to use proxies.
+      cookies:
+        type: object
+        description: Cookies to use for the session.
+      browserWidth:
+        type: number
+        description: Width of the browser window.
+      browserHeight:
+        type: number
+        description: Height of the browser window.
+      
+  commandFunction: |
+    config => ({
+      command: 'node',
+      args: ['cli.js'],
+      env: {
+        BROWSERBASE_API_KEY: config.browserbaseApiKey,
+        BROWSERBASE_PROJECT_ID: config.browserbaseProjectId
+      }
+    })
