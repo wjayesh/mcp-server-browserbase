@@ -3,37 +3,9 @@
 A Model Context Protocol server that uses Playwright and Browserbase
 to provide browser automation tools.
 
-## Setup
-
-1.  Install dependencies:
-    ```bash
-    npm install
-    ```
-2.  Set environment variables (e.g., in a `.env` file):
-    *   `BROWSERBASE_API_KEY`: Your Browserbase API key.
-    *   `BROWSERBASE_PROJECT_ID`: Your Browserbase project ID.
-3.  Compile TypeScript:
-    ```bash
-    npm run build
-    ```
-
 ## How to setup in MCP json
 
-```json
-   {
-      "mcpServers": {
-         "browserbase": {
-            "url": "http://localhost:8931/sse",
-            "env": {
-               "BROWSERBASE_API_KEY": "",
-               "BROWSERBASE_PROJECT_ID": ""
-            }
-         }
-      }
-   }
-```
-
-## Local Dev
+### Local Dev
 
 To run locally we can use STDIO or self-host over SSE. 
 
@@ -58,11 +30,29 @@ To your MCP Config JSON file add the following:
 
 ### SSE: 
 
+Run the following command in your terminal. You can add any flags (see options below) that you see fit to customize your configuration. 
+
 ```bash
    node cli.js --port 8931
 ```
 
-From here you should be able to put the url as "http://localhost:8931/sse" in the config.json
+Then in your MCP Config JSON file put the following: 
+
+```json
+   {
+      "mcpServers": {
+         "browserbase": {
+            "url": "http://localhost:8931/sse",
+            "env": {
+               "BROWSERBASE_API_KEY": "",
+               "BROWSERBASE_PROJECT_ID": ""
+            }
+         }
+      }
+   }
+```
+
+Then reload your MCP client and you should be good to go!
 
 ## Flags Explained:
 
