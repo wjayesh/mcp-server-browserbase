@@ -33,6 +33,11 @@ COPY --from=builder /app/index.d.ts /app/index.d.ts
 COPY --from=builder /app/config.d.ts /app/config.d.ts
 COPY --from=builder /app/package.json /app/package.json
 COPY --from=builder /app/package-lock.json /app/package-lock.json
+COPY --from=builder /app/node_modules /app/node_modules
 
-# Command to run the application
-CMD [ "node", "cli.js" ] 
+# Set environment variables (to be configured at runtime)
+ENV BROWSERBASE_API_KEY=<YOUR_BROWSERBASE_API_KEY>
+ENV BROWSERBASE_PROJECT_ID=<YOUR_BROWSERBASE_PROJECT_ID>
+
+# Command to run the application with absolute path
+ENTRYPOINT [ "node", "/app/cli.js" ] 
