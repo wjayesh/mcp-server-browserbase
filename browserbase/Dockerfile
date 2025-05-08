@@ -5,13 +5,16 @@ FROM node:18-alpine AS builder
 WORKDIR /app
 
 # Copy package.json and package-lock.json
-COPY browserbase/package.json browserbase/package-lock.json ./
+COPY package*.json ./
+
+# Copy TSConfig
+COPY tsconfig.json ./
+
+# Copy the source code first
+COPY . .
 
 # Install dependencies
 RUN npm install
-
-# Copy the rest of the application source code
-COPY browserbase/ .
 
 # Build the TypeScript source code
 RUN npm run build
