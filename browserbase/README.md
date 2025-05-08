@@ -1,13 +1,53 @@
 # Playwright Browserbase MCP Server
 
-A Model Context Protocol server that uses Playwright and Browserbase
-to provide browser automation tools.
+![cover](../assets/browserbase-mcp.png)
+
+The Model Context Protocol (MCP) is an open protocol that enables seamless integration between LLM applications and external data sources and tools. Whether you’re building an AI-powered IDE, enhancing a chat interface, or creating custom AI workflows, MCP provides a standardized way to connect LLMs with the context they need. 
+
+<div>
+   <a href="https://www.loom.com/share/d285d6093b2843e98908c65592031218">
+   <img style="max-width:600px;" src="https://cdn.loom.com/sessions/thumbnails/d285d6093b2843e98908c65592031218-1ab1288912ffd40c-full-play.gif">
+   </a>
+</div>
 
 ## How to setup in MCP json
 
-### Local Dev
+You can either use our Server hosted on NPM or run it completely locally by cloning this repo. 
 
-To run locally we can use STDIO or self-host over SSE. 
+### To run on NPM (Recommended)
+
+Go into your MCP Config JSON and add the Browserbase Server:
+
+```json
+{
+   "mcpServers": {
+      "browserbase": {
+         "command": "npx",
+         "args" : ["@browserbasehq/mcp-server-browserbase"],
+         "env": {
+            "BROWSERBASE_API_KEY": "",
+            "BROWSERBASE_PROJECT_ID": ""
+         }
+      }
+   }
+}
+```
+
+Thats it! Reload your MCP client and Claude will be able to use Browserbase. 
+
+### To run 100% local: 
+
+```bash
+# Clone the Repo 
+git clone https://github.com/browserbase/mcp-server-browserbase.git
+
+# Install the dependencies in the proper directory and build the project
+cd browserbase
+npm install && npm run build
+
+```
+
+Then in your MCP Config JSON run the server. To run locally we can use STDIO or self-host over SSE. 
 
 ### STDIO: 
 
@@ -15,16 +55,16 @@ To your MCP Config JSON file add the following:
 
 ```json
 {
-  "mcpServers": {
-    "playwright": {
+"mcpServers": {
+   "browserbase": {
       "command" : "node",
       "args" : ["/path/to/mcp-server-browserbase/browserbase/cli.js"],
       "env": {
-        "BROWSERBASE_API_KEY": "",
-        "BROWSERBASE_PROJECT_ID": ""
+         "BROWSERBASE_API_KEY": "",
+         "BROWSERBASE_PROJECT_ID": ""
+         }
       }
-    }
-  }
+   }
 }
 ```
 
@@ -73,6 +113,8 @@ The Browserbase MCP server accepts the following command-line flags:
 
 These flags can be passed directly to the CLI or configured in your MCP configuration file.
 
+### NOTE: 
+
 Currently, these flags can only be used with the local server (npx @browserbasehq/mcp-server-browserbase). 
 
 ____
@@ -83,44 +125,42 @@ ____
 
 Here are our docs on [Proxies](https://docs.browserbase.com/features/proxies).
 
-To use proxies in STDIO, set the --proxies flag in your MCP Config
+To use proxies in STDIO, set the --proxies flag in your MCP Config:
 
 ```json
-   {
-      "mcpServers": {
-         "playwright": {
-            "command" : "npx",
-            "args" : ["@browserbasehq/mcp-server-browserbase", "--proxies"],
-            "env": {
-               "BROWSERBASE_API_KEY": "",
-               "BROWSERBASE_PROJECT_ID": ""
-            }
+{
+   "mcpServers": {
+      "browserbase": {
+         "command" : "npx",
+         "args" : ["@browserbasehq/mcp-server-browserbase", "--proxies"],
+         "env": {
+            "BROWSERBASE_API_KEY": "",
+            "BROWSERBASE_PROJECT_ID": ""
          }
       }
    }
-
+}
 ```
 
 ### Contexts
 
 Here are our docs on [Contexts](https://docs.browserbase.com/features/contexts)
 
-To use proxies in STDIO, set the --proxies flag in your MCP Config
+To use contexts in STDIO, set the --contextId flag in your MCP Config:
 
 ```json
-   {
-      "mcpServers": {
-         "playwright": {
-            "command" : "npx",
-            "args" : ["@browserbasehq/mcp-server-browserbase", "--contextId", "<YOUR_CONTEXT_ID>"],
-            "env": {
-               "BROWSERBASE_API_KEY": "",
-               "BROWSERBASE_PROJECT_ID": ""
-            }
+{
+   "mcpServers": {
+      "browserbase": {
+         "command" : "npx",
+         "args" : ["@browserbasehq/mcp-server-browserbase", "--contextId", "<YOUR_CONTEXT_ID>"],
+         "env": {
+            "BROWSERBASE_API_KEY": "",
+            "BROWSERBASE_PROJECT_ID": ""
          }
       }
    }
-
+}
 ```
 
 ### Cookie Injection
@@ -132,23 +172,23 @@ You can flag cookies into the MCP by adding the cookies.json to your MCP Config.
 To use proxies in STDIO, set the --proxies flag in your MCP Config. Your cookies JSON must be in the type of [Playwright Cookies](https://playwright.dev/docs/api/class-browsercontext#browser-context-cookies)
 
 ```json
-   {
-      "mcpServers": {
-         "playwright": {
-            "command" : "npx",
-            "args" : [
-               "@browserbasehq/mcp-server-browserbase", "cookies", 
-               "{
-                  COOKIES JSON IN TYPE OF PLAYWRIGHT COOKIES
-               }"
-            ],
-            "env": {
-               "BROWSERBASE_API_KEY": "",
-               "BROWSERBASE_PROJECT_ID": ""
-            }
+{
+   "mcpServers": {
+      "browserbase" {
+         "command" : "npx",
+         "args" : [
+            "@browserbasehq/mcp-server-browserbase", "--cookies", 
+            '{
+               "cookies": json,
+            }'
+         ],
+         "env": {
+            "BROWSERBASE_API_KEY": "",
+            "BROWSERBASE_PROJECT_ID": ""
          }
       }
    }
+}
 ```
 
 ### Browser Viewport Sizing 
@@ -158,22 +198,22 @@ The default viewport sizing for a browser session is 1024 x 768. You can adjust 
 Here's how to use it for custom browser sizing. We recommend to stick with 16:9 aspect ratios (ie: 1920 x 1080, 1280, 720, 1024 x 768)
 
 ```json
-   {
-      "mcpServers": {
-         "playwright": {
-            "command" : "npx",
-            "args" : [
-               "@browserbasehq/mcp-server-browserbase",
-               "--browserHeight" : 1080,
-               "--browserWidth" : 1920,
-            ],
-            "env": {
-               "BROWSERBASE_API_KEY": "",
-               "BROWSERBASE_PROJECT_ID": ""
-            }
+{
+   "mcpServers": {
+      "browserbase": {
+         "command" : "npx",
+         "args" : [
+            "@browserbasehq/mcp-server-browserbase",
+            "--browserHeight 1080",
+            "--browserWidth 1920",
+         ],
+         "env": {
+            "BROWSERBASE_API_KEY": "",
+            "BROWSERBASE_PROJECT_ID": ""
          }
       }
    }
+}
 ```
 
 ## Structure
@@ -243,9 +283,9 @@ These tools are useful for:
 - Debugging cookie-related issues
 - Manipulating cookie attributes (expiration, security flags, etc.)
 
-## TODO
+## TODO/Roadmap
 
 *   Implement true `ref`-based interaction logic for click, type, drag, hover, select_option.
 *   Implement element-specific screenshots using `ref`.
-*   Add more standard Playwright MCP tools (tabs, navigation, etc.).
+*   Add more standard MCP tools (tabs, navigation, etc.).
 *   Add tests.
