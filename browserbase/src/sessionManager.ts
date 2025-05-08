@@ -97,7 +97,7 @@ export async function createNewBrowserSession(
         height: config.viewPort?.browserHeight ?? 768,
       },
       context: config.context?.contextId ? {
-        id: config.context?.contextId ?? undefined,
+        id: config.context?.contextId,
         persist: config.context?.persist ?? true,
       } : undefined,
     }
