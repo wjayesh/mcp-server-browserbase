@@ -28,9 +28,8 @@ node dist/index.js
 ```json
    {
       "mcpServers": {
-         "playwright": {
+         "browserbase": {
             "url": "http://localhost:8931/sse",
-            "args" : ["--proxies"],
             "env": {
                "BROWSERBASE_API_KEY": "",
                "BROWSERBASE_PROJECT_ID": ""
@@ -53,7 +52,80 @@ From here you should be able to put the url as "http://localhost:8931/sse" in th
 You can also pass in the optional flags for proxies and context id that are shown in [`config.d.ts`](./config.d.ts).
 ____
 
-The server communicates over stdio according to the Model Context Protocol.
+## Flags & Example Configs
+
+### Proxies
+
+Here are our docs on [Proxies](https://docs.browserbase.com/features/proxies).
+
+To use proxies in STDIO, set the --proxies flag in your MCP Config
+
+```json
+   {
+      "mcpServers": {
+         "playwright": {
+            "command" : "npx",
+            "args" : ["@browserbasehq/mcp-server-browserbase", "--proxies"],
+            "env": {
+               "BROWSERBASE_API_KEY": "",
+               "BROWSERBASE_PROJECT_ID": ""
+            }
+         }
+      }
+   }
+
+```
+
+### Contexts
+
+Here are our docs on [Contexts](https://docs.browserbase.com/features/contexts)
+
+To use proxies in STDIO, set the --proxies flag in your MCP Config
+
+```json
+   {
+      "mcpServers": {
+         "playwright": {
+            "command" : "npx",
+            "args" : ["@browserbasehq/mcp-server-browserbase", "--contextId", "<YOUR_CONTEXT_ID>"],
+            "env": {
+               "BROWSERBASE_API_KEY": "",
+               "BROWSERBASE_PROJECT_ID": ""
+            }
+         }
+      }
+   }
+
+```
+
+### Cookie Injection
+
+Why would you need to inject cookies? Our context API currently works on persistent cookies, but not session cookies. So sometimes our persistent auth might not work (we're working hard to add this functionality). 
+
+You can flag cookies into the MCP by adding the cookies.json to your MCP Config.
+
+To use proxies in STDIO, set the --proxies flag in your MCP Config. Your cookies JSON must be in the type of [Playwright Cookies](https://playwright.dev/docs/api/class-browsercontext#browser-context-cookies)
+
+```json
+   {
+      "mcpServers": {
+         "playwright": {
+            "command" : "npx",
+            "args" : [
+               "@browserbasehq/mcp-server-browserbase", "cookies", 
+               "{
+                  COOKIES JSON IN TYPE OF PLAYWRIGHT COOKIES
+               }"
+            ],
+            "env": {
+               "BROWSERBASE_API_KEY": "",
+               "BROWSERBASE_PROJECT_ID": ""
+            }
+         }
+      }
+   }
+
+```
 
 ## Structure
 

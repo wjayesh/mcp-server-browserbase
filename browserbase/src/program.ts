@@ -12,10 +12,16 @@ import packageJSON from '../package.json' with { type: 'json' };
 program
     .version('Version ' + packageJSON.version)
     .name(packageJSON.name)
+    .option('--browserbaseApiKey <key>', 'The Browserbase API Key to use')
+    .option('--browserbaseProjectId <id>', 'The Browserbase Project ID to use')
     .option('--proxies', 'Use Browserbase proxies.')
-    .option('--context <contextId>', 'Browserbase Context to use.')
+    .option('--contextId <contextId>', 'Browserbase Context ID to use.')
+    .option('--persist [boolean]', 'Whether to persist the Browserbase context', true)
     .option('--port <port>', 'Port to listen on for SSE transport.')
     .option('--host <host>', 'Host to bind server to. Default is localhost. Use 0.0.0.0 to bind to all interfaces.')
+    .option('--cookies [json]', 'JSON array of cookies to inject into the browser. Format: [{"name":"cookie1","value":"val1","domain":"example.com"}, ...]')
+    .option('--browserWidth <width>', 'Browser width to use for the browser.')
+    .option('--browserHeight <height>', 'Browser height to use for the browser.')
     .action(async options => {
       const config = await resolveConfig(options);
       const serverList = new ServerList(async() => createServer(config));

@@ -1,3 +1,5 @@
+import type { Cookie } from "playwright-core";
+
 export type Config = {
     /**
      * The Browserbase API Key to use
@@ -18,7 +20,36 @@ export type Config = {
      * Potential Browserbase Context to use 
      * Would be a context ID 
      */
-    context?: string;
+    context?: {
+        /**
+         * The ID of the context to use
+         */
+        contextId?: string;
+        /**
+         * Whether or not to persist the context
+         * 
+         * @default true
+         */
+        persist?: boolean;
+    };
+    /**
+     * 
+     */
+    viewPort?: {
+        /**
+         * The width of the browser
+         */
+        browserWidth?: number;
+        /**
+         * The height of the browser
+         */
+        browserHeight?: number;
+    };
+    /**
+     * Cookies to inject into the Browserbase context
+     * Format: Array of cookie objects with name, value, domain, and optional path, expires, httpOnly, secure, sameSite
+     */
+    cookies?: Cookie[];
     /**
      * Whether or not to port to a server
      * 

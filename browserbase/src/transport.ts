@@ -105,7 +105,7 @@ export function startHttpTransport(port: number, hostname: string | undefined, s
       'Put this in your client config:',
       JSON.stringify({
         'mcpServers': {
-          'playwright': {
+          'browserbase': {
             'url': `${url}/sse`
           }
         }
@@ -113,6 +113,6 @@ export function startHttpTransport(port: number, hostname: string | undefined, s
       'If your client supports streamable HTTP, you can use the /mcp endpoint instead.',
     ].join('\n');
     // eslint-disable-next-line no-console
-    // console.log(message);
+    console.log(message);
   });
 }

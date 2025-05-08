@@ -4,25 +4,15 @@ import {
   Page,
 } from "playwright-core";
 import { Browserbase } from "@browserbasehq/sdk";
-import type { Config } from "./config.js";
+import type { Config } from "./config.js"; 
+import { SessionCreateParams } from "@browserbasehq/sdk/src/resources/sessions/sessions.js";
+import type { Cookie } from "playwright-core";
 
 // Define the type for a session object
 export type BrowserSession = {
   browser: Browser;
   page: Page;
   sessionId: string;
-};
-
-// Type for session creation options
-type SessionCreationOptions = {
-  projectId: string;
-  browserSettings?: {
-    context?: {
-      id: string;
-      persist: boolean;
-    };
-  };
-  // Add other potential Browserbase session options here if needed
 };
 
 // Global state for managing browser sessions
@@ -57,14 +47,33 @@ export function getActiveSessionId(): string {
   return activeSessionId;
 }
 
+/**
+ * Adds cookies to a browser context
+ * @param context Playwright browser context
+ * @param cookies Array of cookies to add
+ */
+export async function addCookiesToContext(context: any, cookies: Cookie[]): Promise<void> {
+  if (!cookies || cookies.length === 0) {
+    return;
+  }
+  
+  try {
+    process.stderr.write(`[SessionManager] Adding ${cookies.length} cookies to browser context\n`);
+    await context.addCookies(cookies);
+    process.stderr.write(`[SessionManager] Successfully added cookies to browser context\n`);
+  } catch (error) {
+    process.stderr.write(
+      `[SessionManager] Error adding cookies to browser context: ${
+        error instanceof Error ? error.message : String(error)
+      }\n`
+    );
+  }
+}
+
 // Function to create a new Browserbase session and connect Playwright
 export async function createNewBrowserSession(
   newSessionId: string,
-  config: Config,
-  options?: {
-    contextId?: string;
-    persistContext?: boolean;
-  }
+  config: Config, 
 ): Promise<BrowserSession> {
   if (!config.browserbaseApiKey) {
     throw new Error("Browserbase API Key is missing in the configuration.");
@@ -77,18 +86,22 @@ export async function createNewBrowserSession(
     apiKey: config.browserbaseApiKey,
   });
 
-  const sessionOptions: SessionCreationOptions = {
-    projectId: config.browserbaseProjectId,
-  };
-
-  if (options?.contextId) {
-    sessionOptions.browserSettings = {
-      context: {
-        id: options.contextId,
-        persist: options.persistContext !== false, // Default to true
+  // Prepare session creation options
+  const sessionOptions: SessionCreateParams = {
+    // Use non-null assertion after check
+    projectId: config.browserbaseProjectId!,
+    proxies: config.proxies, 
+    browserSettings: {
+      viewport: {
+        width: config.viewPort?.browserWidth ?? 1024,
+        height: config.viewPort?.browserHeight ?? 768,
       },
-    };
-  }
+      context: {
+        id: config.context?.contextId ?? "",
+        persist: config.context?.persist ?? true,
+      }
+    }
+  };
 
   try {
     process.stderr.write(
@@ -128,6 +141,12 @@ export async function createNewBrowserSession(
     if (!context) {
       context = await browser.newContext();
     }
+    
+    // Add cookies to the context if they are provided in the config
+    if (config.cookies && Array.isArray(config.cookies) && config.cookies.length > 0) {
+      await addCookiesToContext(context, config.cookies);
+    }
+    
     let page = context.pages()[0];
     if (!page) {
       page = await context.newPage();
@@ -157,8 +176,14 @@ export async function createNewBrowserSession(
         ? creationError.message
         : String(creationError);
     process.stderr.write(
-      `[SessionManager] Creating session ${newSessionId} failed: ${errorMessage}\n`
-    );
+      `[SessionManager] Creating session ${newSessionId} failed: ${
+        creationError instanceof Error
+          ? creationError.message
+          : String(creationError)
+      }`
+    ); // Keep ERROR comment if useful, but removed from output
+    // Attempt to clean up partially created resources if possible (e.g., close browser if connection succeeded but context/page failed)
+    // This part is complex, might need more state tracking. For now, just log and re-throw.
     throw new Error(
       `Failed to create/connect session ${newSessionId}: ${errorMessage}`
     );
