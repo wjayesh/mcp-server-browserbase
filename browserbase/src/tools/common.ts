@@ -11,13 +11,12 @@
 export {}; // Ensure file is treated as a module 
 
 import { z } from 'zod';
-import type { Tool, ToolSchema, ToolContext, ToolResult } from "./tool.js"; // Assuming ToolContext is needed if handle uses context
+import type { Tool, ToolSchema, ToolResult } from "./tool.js"; // Assuming ToolContext is needed if handle uses context
 import type { Context } from '../context.js'; // Import main Context for handle
 import type { ToolActionResult } from '../context.js'; // Import ToolActionResult
 
 // Assuming createSuccessResult/createErrorResult exist in toolUtils.js
-import { createSuccessResult, createErrorResult } from './toolUtils.js';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+// import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 // --- Tool: Wait ---
 const WaitInputSchema = z.object({
