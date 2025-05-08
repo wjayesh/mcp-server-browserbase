@@ -17,12 +17,6 @@ to provide browser automation tools.
     npm run build
     ```
 
-## Running
-
-```bash
-node dist/index.js
-```
-
 ## How to setup in MCP json
 
 ```json
@@ -124,7 +118,31 @@ To use proxies in STDIO, set the --proxies flag in your MCP Config. Your cookies
          }
       }
    }
+```
 
+### Browser Viewport Sizing 
+
+The default viewport sizing for a browser session is 1024 x 768. You can adjust the Browser viewport sizing with browserWidth and browserHeight flags. 
+
+Here's how to use it for custom browser sizing. We recommend to stick with 16:9 aspect ratios (ie: 1920 x 1080, 1280, 720, 1024 x 768)
+
+```json
+   {
+      "mcpServers": {
+         "playwright": {
+            "command" : "npx",
+            "args" : [
+               "@browserbasehq/mcp-server-browserbase",
+               "--browserHeight" : 1080,
+               "--browserWidth" : 1920,
+            ],
+            "env": {
+               "BROWSERBASE_API_KEY": "",
+               "BROWSERBASE_PROJECT_ID": ""
+            }
+         }
+      }
+   }
 ```
 
 ## Structure
