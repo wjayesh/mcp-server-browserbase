@@ -43,7 +43,27 @@ To run locally we can self-host over SSE.
 
 From here you should be able to put the url as "http://localhost:8931/sse" in the config.json
 
-You can also pass in the optional flags for proxies and context id that are shown in [`config.d.ts`](./config.d.ts).
+## Flags Explained:
+
+The Browserbase MCP server accepts the following command-line flags:
+
+| Flag | Description |
+|------|-------------|
+| `--browserbaseApiKey <key>` | Your Browserbase API key for authentication |
+| `--browserbaseProjectId <id>` | Your Browserbase project ID |
+| `--proxies` | Enable Browserbase proxies for the session |
+| `--contextId <contextId>` | Specify a Browserbase Context ID to use |
+| `--persist [boolean]` | Whether to persist the Browserbase context (default: true) |
+| `--port <port>` | Port to listen on for HTTP/SSE transport |
+| `--host <host>` | Host to bind server to (default: localhost, use 0.0.0.0 for all interfaces) |
+| `--cookies [json]` | JSON array of cookies to inject into the browser |
+| `--browserWidth <width>` | Browser viewport width (default: 1024) |
+| `--browserHeight <height>` | Browser viewport height (default: 768) |
+
+These flags can be passed directly to the CLI or configured in your MCP configuration file.
+
+Currently, these flags can only be used with the local server (npx @browserbasehq/mcp-server-browserbase). 
+
 ____
 
 ## Flags & Example Configs
