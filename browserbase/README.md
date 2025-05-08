@@ -23,7 +23,7 @@ Go into your MCP Config JSON and add the Browserbase Server:
    "mcpServers": {
       "browserbase": {
          "command": "npx",
-         "args" : ["@browserbasehq/mcp-server-browserbase"],
+         "args" : ["@browserbasehq/mcp"],
          "env": {
             "BROWSERBASE_API_KEY": "",
             "BROWSERBASE_PROJECT_ID": ""
@@ -115,7 +115,7 @@ These flags can be passed directly to the CLI or configured in your MCP configur
 
 ### NOTE: 
 
-Currently, these flags can only be used with the local server (npx @browserbasehq/mcp-server-browserbase). 
+Currently, these flags can only be used with the local server (npx @browserbasehq/mcp). 
 
 ____
 
@@ -132,7 +132,7 @@ To use proxies in STDIO, set the --proxies flag in your MCP Config:
    "mcpServers": {
       "browserbase": {
          "command" : "npx",
-         "args" : ["@browserbasehq/mcp-server-browserbase", "--proxies"],
+         "args" : ["@browserbasehq/mcp", "--proxies"],
          "env": {
             "BROWSERBASE_API_KEY": "",
             "BROWSERBASE_PROJECT_ID": ""
@@ -153,7 +153,7 @@ To use contexts in STDIO, set the --contextId flag in your MCP Config:
    "mcpServers": {
       "browserbase": {
          "command" : "npx",
-         "args" : ["@browserbasehq/mcp-server-browserbase", "--contextId", "<YOUR_CONTEXT_ID>"],
+         "args" : ["@browserbasehq/mcp", "--contextId", "<YOUR_CONTEXT_ID>"],
          "env": {
             "BROWSERBASE_API_KEY": "",
             "BROWSERBASE_PROJECT_ID": ""
@@ -177,7 +177,7 @@ To use proxies in STDIO, set the --proxies flag in your MCP Config. Your cookies
       "browserbase" {
          "command" : "npx",
          "args" : [
-            "@browserbasehq/mcp-server-browserbase", "--cookies", 
+            "@browserbasehq/mcp", "--cookies", 
             '{
                "cookies": json,
             }'
@@ -203,7 +203,7 @@ Here's how to use it for custom browser sizing. We recommend to stick with 16:9 
       "browserbase": {
          "command" : "npx",
          "args" : [
-            "@browserbasehq/mcp-server-browserbase",
+            "@browserbasehq/mcp",
             "--browserHeight 1080",
             "--browserWidth 1920",
          ],
