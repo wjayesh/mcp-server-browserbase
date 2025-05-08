@@ -92,15 +92,15 @@ export async function createNewBrowserSession(
     projectId: config.browserbaseProjectId!,
     proxies: config.proxies, 
     browserSettings: {
-      ...(config.viewPort ? { viewport: { 
-        width: config.viewPort?.browserWidth,
-        height: config.viewPort?.browserHeight,
-      }} : {}),
-      ...(config.context?.contextId ? { context: {
-        id: config.context?.contextId,
-        persist: config.context?.persist ?? true, // Default to true if not specified
-      }} : {})
-    },
+      viewport: {
+        width: config.viewPort?.browserWidth ?? 1024,
+        height: config.viewPort?.browserHeight ?? 768,
+      },
+      context: {
+        id: config.context?.contextId ?? "",
+        persist: config.context?.persist ?? true,
+      }
+    }
   };
 
   try {
