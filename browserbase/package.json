@@ -1,11 +1,12 @@
 {
-  "name": "@browserbasehq/mcp-server-browserbase",
-  "version": "1.0.0",
+  "name": "@browserbasehq/mcp",
+  "version": "1.0.2",
   "description": "MCP server for browser automation using browserbase",
   "license": "MIT",
   "author": "Browserbase, Inc. (https://browserbase.com)",
   "homepage": "https://browserbase.com",
   "type": "module",
+  "main": "./cli.js",
   "engines": {
     "node": ">=18"
   },
@@ -28,7 +29,7 @@
     "./package.json": "./package.json",
     ".": {
       "types": "./index.d.ts",
-      "default": "./index.js"
+      "default": "./cli.js"
     }
   },
   "dependencies": {
@@ -49,5 +50,8 @@
   },
   "bin": {
     "mcp-server-browserbase": "cli.js"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

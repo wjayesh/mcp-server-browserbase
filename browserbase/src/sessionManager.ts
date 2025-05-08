@@ -96,10 +96,10 @@ export async function createNewBrowserSession(
         width: config.viewPort?.browserWidth ?? 1024,
         height: config.viewPort?.browserHeight ?? 768,
       },
-      context: {
-        id: config.context?.contextId ?? "",
+      context: config.context?.contextId ? {
+        id: config.context?.contextId,
         persist: config.context?.persist ?? true,
-      }
+      } : undefined,
     }
   };
 

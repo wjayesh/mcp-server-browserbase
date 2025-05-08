@@ -44,10 +44,6 @@ const defaultConfig: Config = {
   browserbaseApiKey: process.env.BROWSERBASE_API_KEY,
   browserbaseProjectId: process.env.BROWSERBASE_PROJECT_ID,
   proxies: false,
-  context: {
-    contextId: undefined,
-    persist: true,
-  },
   server: {
     port: undefined,
     host: undefined,
