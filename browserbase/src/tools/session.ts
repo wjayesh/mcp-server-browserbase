@@ -1,7 +1,7 @@
 import { z } from "zod";
-import type { Tool, ToolSchema, ToolResult } from "./tool.js"; // Assuming these exist
-import type { Context } from "../context.js"; // For handle signature
-import type { ToolActionResult } from "../context.js"; // For action return type
+import type { Tool, ToolSchema, ToolResult } from "./tool.js"; 
+import type { Context } from "../context.js"; 
+import type { ToolActionResult } from "../context.js"; 
 
 // Import SessionManager functions
 import {
@@ -25,7 +25,7 @@ const CreateSessionInputSchema = z.object({
 type CreateSessionInput = z.infer<typeof CreateSessionInputSchema>;
 
 const createSessionSchema: ToolSchema<typeof CreateSessionInputSchema> = {
-  name: "browserbase_session_create", // Renamed
+  name: "browserbase_session_create", 
   description:
     "Create or reuse a cloud browser session using Browserbase. Updates the active session.", 
   inputSchema: CreateSessionInputSchema,
@@ -37,7 +37,6 @@ async function handleCreateSession(
   context: Context,
   params: CreateSessionInput
 ): Promise<ToolResult> {
-  // The main logic will now be inside the returned 'action' function
   const action = async (): Promise<ToolActionResult> => {
     try {
       const config = context.config; // Get config from context
@@ -233,5 +232,4 @@ const closeSessionTool: Tool<typeof CloseSessionInputSchema> = {
   handle: handleCloseSession,
 };
 
-// Export an array of the tool objects as default
 export default [createSessionTool, closeSessionTool];

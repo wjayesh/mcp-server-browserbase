@@ -17,8 +17,10 @@ export type BrowserSession = {
 
 // Global state for managing browser sessions
 const browsers = new Map<string, BrowserSession>();
+
 // Keep track of the default session explicitly
 let defaultBrowserSession: BrowserSession | null = null;
+
 // Define a specific ID for the default session
 export const defaultSessionId = "browserbase_session_main";
 
@@ -181,9 +183,7 @@ export async function createNewBrowserSession(
           ? creationError.message
           : String(creationError)
       }`
-    ); // Keep ERROR comment if useful, but removed from output
-    // Attempt to clean up partially created resources if possible (e.g., close browser if connection succeeded but context/page failed)
-    // This part is complex, might need more state tracking. For now, just log and re-throw.
+    ); 
     throw new Error(
       `Failed to create/connect session ${newSessionId}: ${errorMessage}`
     );

@@ -1,10 +1,6 @@
-#!/usr/bin/env node
-
-// Load environment variables early
 import dotenv from "dotenv";
 dotenv.config();
 
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { Config } from "../config.js";
 import type { Tool } from "./tools/tool.js";
 
@@ -15,6 +11,7 @@ import getText from "./tools/getText.js";
 import session from "./tools/session.js";
 import common from "./tools/common.js";
 import contextTools from "./tools/context.js";
+
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListResourcesRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
@@ -31,8 +28,6 @@ const requiredEnvVars = {
 Object.entries(requiredEnvVars).forEach(([name, value]) => {
   if (!value) throw new Error(`${name} environment variable is required`);
 });
-
-// const serverVersion = "0.5.1";
 
 export async function createServer(config: Config): Promise<Server> {
   // Create the server
@@ -139,10 +134,9 @@ export async function createServer(config: Config): Promise<Server> {
   // Wrap server close to also close context
   const originalClose = server.close.bind(server);
   server.close = async () => {
-    // await context.closeSession();
     await originalClose();
   };
   
-  // Return the configured server instance, DO NOT connect here
+  // Return the configured server instance
   return server;
 } 
