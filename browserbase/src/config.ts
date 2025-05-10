@@ -4,11 +4,11 @@ import path from 'path';
 import { sanitizeForFilePath } from './tools/utils.js'; 
 import type { Cookie } from "playwright-core";
 
-export type ToolCapability = 'core' | string; // Example capabilities
+export type ToolCapability = 'core' | string; 
 
 export interface Config {
-  browserbaseApiKey?: string; // Make optional for easier merging
-  browserbaseProjectId?: string; // Make optional for easier merging
+  browserbaseApiKey?: string; 
+  browserbaseProjectId?: string; 
   server?: {
     port?: number;
     host?: string;

@@ -29,17 +29,3 @@ export function createSuccessResult(message: string, toolName?: string): CallToo
         isError: false,
     };
 }
-
-export function logError(message: string, toolName: string): void {
-  const prefix = `[${toolName} Error]: `;
-  // console.error(prefix + message);
-}
-
-// Placeholder function to locate elements using combined strategies
-
-export function logSuccess(message: string, toolName: string): void {
-  const prefix = `[${toolName} Success]: `;
-  // console.log(prefix + message); // Log success
-}
-
-// Add more helper functions if needed, e.g., for specific content types 

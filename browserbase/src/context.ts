@@ -3,23 +3,19 @@ import type { BrowserSession } from "./sessionManager.js";
 import {
   getSession,
   defaultSessionId,
-  closeAllSessions,
 } from "./sessionManager.js";
-import type { Tool, ToolContext, ToolResult } from "./tools/tool.js";
+import type { Tool, ToolResult } from "./tools/tool.js";
 import type { Config } from "../config.js";
 import {
   Resource,
   CallToolResult,
   TextContent,
   ImageContent,
-  ResourceListChangedNotificationSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { PageSnapshot } from "./pageSnapshot.js";
-import { Writable } from "stream"; // Import Writable for process.stderr
-import type { Page, Locator } from "playwright"; // Import Page and Locator types
+import type { Page, Locator } from "playwright"; 
 
-// Define ToolActionResult locally if not exported
 export type ToolActionResult =
   | { content?: (ImageContent | TextContent)[] }
   | undefined
@@ -27,25 +23,8 @@ export type ToolActionResult =
 
 /**
  * Manages the context for tool execution within a specific Browserbase session.
- *
- * Role Analogy:
- * This class holds session-specific state (like latest snapshots, resources)
- * and provides access to the active page/browser for the current session.
- * This is somewhat analogous to the role of the `Tab` class in the Playwright
- * MCP example, which encapsulates state for a single page.
- *
- * Differences from Playwright MCP Context Example:
- * - Browser Lifecycle: This Context does NOT manage the browser launch/
- *   connection lifecycle; that is handled by `sessionManager` (sessionManager.ts) interacting
- *   with the Browserbase API.
- * - Tab Management: This Context focuses on a single active session determined
- *   by `currentSessionId`, unlike the Playwright example which explicitly
- *   manages an array of `Tab` objects.
- * - Execution Model: This Context uses a `run`/`CallToolResult` pattern. Its `run`
- *   method calls `tool.run`, which performs the action and returns the final
- *   result structure. The Playwright example uses a `handle`/`ToolActionResult`
- *   pattern where the Context interprets the result to perform actions.
  */
+
 export class Context {
   private server: Server;
   public readonly config: Config;

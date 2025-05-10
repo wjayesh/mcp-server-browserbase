@@ -1,32 +1,11 @@
-/**
- * Copyright (c) Microsoft Corporation.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
-// Use types from playwright-core consistent with the project
 import type { Page, FrameLocator, Locator } from 'playwright-core';
 import yaml from 'yaml';
-// Import specific YAML types, remove Scalar from type-only
-// Removed YAML types no longer needed by this version
-import { Writable } from 'stream'; // Import Writable for process.stderr - KEEPING this as it might be used elsewhere implicitly, though not directly in this class version
 
 type PageOrFrameLocator = Page | FrameLocator;
 
 export class PageSnapshot {
   private _frameLocators: PageOrFrameLocator[] = [];
   private _text!: string;
-  // Removed _snapshotDoc as it's not used in this version
 
   constructor() {
   }
@@ -42,7 +21,6 @@ export class PageSnapshot {
   }
 
   private async _build(page: Page) {
-    // Removed storing to _snapshotDoc
     const yamlDocument = await this._snapshotFrame(page);
     this._text = [
       `- Page Snapshot`,
@@ -53,15 +31,12 @@ export class PageSnapshot {
     ].join('\n');
   }
 
-  // Reverted _snapshotFrame to match the provided example exactly
   private async _snapshotFrame(frame: Page | FrameLocator) {
     const frameIndex = this._frameLocators.push(frame) - 1;
-    // Removed logging from this version
     let snapshotString = '';
     try {
         snapshotString = await (frame.locator('body') as any).ariaSnapshot({ ref: true, emitGeneric: true });
     } catch (e) {
-        // Simple error string, removed logging
         snapshotString = `error: Could not take snapshot. Error: ${e instanceof Error ? e.message : String(e)}`;
     }
 
@@ -79,21 +54,17 @@ export class PageSnapshot {
       } else if (yaml.isScalar(node)) {
         if (typeof node.value === 'string') {
           const value = node.value;
-          // Simplified frame prefixing logic from example
           if (frameIndex > 0)
             node.value = value.replace('[ref=', `[ref=f${frameIndex}`);
 
           if (value.startsWith('iframe ')) {
-            const ref = value.match(/\[ref=(.*)\]/)?.[1]; // Original regex from example
+            const ref = value.match(/\[ref=(.*)\]/)?.[1]; 
             if (ref) {
               try {
-                // Original iframe locator strategy from example
                 const childFrameLocator = frame.frameLocator(`aria-ref=${ref}`);
                 const childSnapshot = await this._snapshotFrame(childFrameLocator);
-                // Original createPair structure
                 return snapshot.createPair(node.value, childSnapshot);
               } catch (error) {
-                 // Original error handling
                 return snapshot.createPair(node.value, '<could not take iframe snapshot>');
               }
             }
@@ -107,20 +78,12 @@ export class PageSnapshot {
     if (snapshot.contents) {
         await visit(snapshot.contents);
     } else {
-        // Handle empty snapshot doc contents like original
         const emptyMapDoc = yaml.parseDocument('{}');
         snapshot.contents = emptyMapDoc.contents;
     }
-    // Removed logging
-    return snapshot; // Return the processed document
+    return snapshot; 
   }
 
-  // Removed findNodeByRef helper
-
-  // Removed extractRoleAndName helper
-
-
-  // Reverted refLocator to match the provided example exactly
   refLocator(ref: string): Locator {
     let frameIndex = 0;
     let frame: PageOrFrameLocator;
@@ -144,8 +107,6 @@ export class PageSnapshot {
     if (!frame)
       throw new Error(`Frame (index ${frameIndex}) could not be determined. Provide ref from the most current snapshot.`);
 
-    // Removed console warnings and complex strategy
-    // Use the exact locator strategy from the Playwright MCP example
     return frame.locator(`aria-ref=${targetRef}`);
   }
 }

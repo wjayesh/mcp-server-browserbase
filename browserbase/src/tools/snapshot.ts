@@ -1,36 +1,14 @@
-/**
- * Copyright (c) Microsoft Corporation.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 import { z } from "zod";
-// Removed playwright import as it's no longer directly used in handles
-// import type * as playwright from "playwright";
 import type {
   TextContent,
   ImageContent,
 } from "@modelcontextprotocol/sdk/types.js";
 
-import { defineTool, type ToolResult, type ToolSchema } from "./tool.js";
-import type { Context, ToolActionResult } from "../context.js"; // Assuming Context provides callBrowserbaseTool
-import type { Page, Locator, FrameLocator } from "playwright-core"; // <-- ADDED Import Page and Locator
-import { PageSnapshot } from "../pageSnapshot.js"; // Adjust path if needed
-import { Writable } from "stream"; // Import Writable for process.stderr
-import { outputFile } from "../config.js"; // Added import for outputFile
-// Assuming this utility exists
-// Removed outputFile import as it's likely not used now
-// import { outputFile } from '../config.js'; // Import outputFile
+import { defineTool, type ToolResult,  } from "./tool.js";
+import type { Context, ToolActionResult } from "../context.js"; 
+import type { Page, Locator } from "playwright-core"; 
+import { PageSnapshot } from "../pageSnapshot.js"; 
+import { outputFile } from "../config.js"; 
 
 // --- Tool: Snapshot ---
 const SnapshotInputSchema = z.object({});
@@ -76,9 +54,6 @@ const elementSchema = z.object({
     .describe("Exact target element reference from the page snapshot"),
 });
 type ElementInput = z.infer<typeof elementSchema>;
-
-// Placeholder for generateLocator function (as seen in the Playwright MCP example)
-// We'll define it properly at the end of the file.
 
 // --- Tool: Click (Adapted Handle, Example Action) ---
 const click = defineTool({
@@ -427,13 +402,11 @@ const screenshot = defineTool<typeof screenshotSchema>({
       pageSnapshot = context.snapshotOrDie();
     }
     const fileType = params.raw ? "png" : "jpeg";
-    // Use context.config directly for outputFile
     const fileName = await outputFile(
       context.config,
       `screenshot-${Date.now()}.${fileType}`
     );
 
-    // Typing for Playwright screenshot options
     const baseOptions: Omit<
       Parameters<Page["screenshot"]>[0],
       "type" | "quality" | "path"
@@ -508,7 +481,7 @@ const screenshot = defineTool<typeof screenshotSchema>({
           ],
         };
       } else {
-        // If base64 is not included, return an empty content array, like playwright-mcp
+        // If base64 is not included, return an empty content array
         return { content: [] };
       }
     };
@@ -516,16 +489,13 @@ const screenshot = defineTool<typeof screenshotSchema>({
     return {
       code,
       action,
-      captureSnapshot: true, // Consistent with existing tool
-      waitForNetwork: false, // Consistent with existing tool
+      captureSnapshot: true, 
+      waitForNetwork: false, 
     };
   },
 });
 
-// Ensure all defined tools are exported
-// --- Replace generateLocator function with Playwright MCP version ---
 export async function generateLocator(locator: Locator): Promise<string> {
-  // Use Playwright's internal method (requires cast)
   return (locator as any)._generateLocatorString();
 }
 

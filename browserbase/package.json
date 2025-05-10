@@ -1,8 +1,7 @@
 {
   "name": "@browserbasehq/mcp",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "MCP server for browser automation using browserbase",
-  "license": "MIT",
   "author": "Browserbase, Inc. (https://browserbase.com)",
   "homepage": "https://browserbase.com",
   "type": "module",
@@ -11,6 +10,7 @@
     "node": ">=18"
   },
   "files": [
+    "../assets/browserbase-mcp.png",
     "dist",
     "cli.js",
     "index.d.ts",

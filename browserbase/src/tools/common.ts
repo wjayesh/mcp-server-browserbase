@@ -1,22 +1,9 @@
-// import { AccessibilitySnapshot, AccessibilityNode } from "@modelcontextprotocol/sdk/types.js"; // Type might not be exported
-
-// Common state and helpers for tools, moved from handlers.ts
-
-// Store latest snapshot per session - MOVED TO Context
-// export const latestSnapshots = new Map<string, any>(); 
-
-// findNodeByRef helper removed as interaction tools now use aria-ref selector directly. 
-
-// No common state remains here for now.
 export {}; // Ensure file is treated as a module 
 
 import { z } from 'zod';
-import type { Tool, ToolSchema, ToolResult } from "./tool.js"; // Assuming ToolContext is needed if handle uses context
-import type { Context } from '../context.js'; // Import main Context for handle
-import type { ToolActionResult } from '../context.js'; // Import ToolActionResult
-
-// Assuming createSuccessResult/createErrorResult exist in toolUtils.js
-// import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type { Tool, ToolSchema, ToolResult } from "./tool.js"; 
+import type { Context } from '../context.js'; 
+import type { ToolActionResult } from '../context.js'; 
 
 // --- Tool: Wait ---
 const WaitInputSchema = z.object({
@@ -122,9 +109,3 @@ export default [
     closeTool,
     resizeTool,
 ];
-
-// Remove old direct exports
-// export const waitTool: Tool<WaitInput> = { ... };
-// export const closeTool: Tool<CloseInput> = { ... };
-// export const resizeTool: Tool<ResizeInput> = { ... };
-// export function common(): Tool[] { ... }; 

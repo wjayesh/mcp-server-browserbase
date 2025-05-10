@@ -1,13 +1,11 @@
 import { z } from "zod";
-import type { Tool, ToolSchema, ToolContext, ToolResult } from "./tool.js";
-// import { createSuccessResult, createErrorResult } from "./toolUtils.js";
+import type { Tool, ToolSchema, ToolResult } from "./tool.js";
 import type { Context } from "../context.js";
 import type { ToolActionResult } from "../context.js";
 import { Browserbase } from "@browserbasehq/sdk";
 
 // Store contexts in memory 
-// In a production app, these should be persisted to a database
-const contexts = new Map<string, string>();
+const contexts = new Map<string, string>(); 
 
 // --- Tool: Create Context ---
 const CreateContextInputSchema = z.object({
@@ -120,8 +118,7 @@ async function handleDeleteContext(
 
     console.error(`Deleting Browserbase context: ${contextId}`);
     
-    // Delete from Browserbase API
-    // The SDK may not have a delete method directly, so we use the REST API
+    // Delete using Browserbase API
     const response = await fetch(`https://api.browserbase.com/v1/contexts/${contextId}`, {
       method: 'DELETE',
       headers: {

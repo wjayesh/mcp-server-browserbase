@@ -1,9 +1,7 @@
 import { z } from 'zod';
-// Import ToolResult and adjust Tool type usage
-import type { Tool, ToolSchema, ToolContext, ToolResult } from "./tool.js";
-import { createSuccessResult, createErrorResult } from "./toolUtils.js"; // Assuming these exist
-import type { Context } from '../context.js'; // For handle signature
-import type { ToolActionResult } from '../context.js'; // For action return type
+import type { Tool, ToolSchema, ToolResult } from "./tool.js";
+import type { Context } from '../context.js'; 
+import type { ToolActionResult } from '../context.js'; 
 
 // --- Tool: Get Text ---
 const GetTextInputSchema = z.object({
@@ -34,7 +32,6 @@ async function handleGetText(context: Context, params: GetTextInput): Promise<To
             }
             return { content: [{ type: 'text', text: textContent ?? "" }] };
         } catch (error) {
-            // Log error? Throw? Action results don't easily convey errors back to Context.run
             console.error(`GetText action failed: ${error}`);
             throw error; // Rethrow to be caught by Context.run's try/catch around handle/action
         }
@@ -55,5 +52,4 @@ const getTextTool: Tool<typeof GetTextInputSchema> = {
     handle: handleGetText,
 };
 
-// Export the single tool object as default
-export default [getTextTool]; // Export as an array containing the tool 
+export default [getTextTool]; 
