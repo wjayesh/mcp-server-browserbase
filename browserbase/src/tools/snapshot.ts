@@ -3,10 +3,10 @@ import type {
   TextContent,
   ImageContent,
 } from "@modelcontextprotocol/sdk/types.js";
+import type { Locator, PageScreenshotOptions } from "playwright-core";
 
 import { defineTool, type ToolResult,  } from "./tool.js";
 import type { Context, ToolActionResult } from "../context.js"; 
-import type { Page, Locator } from "playwright-core"; 
 import { PageSnapshot } from "../pageSnapshot.js"; 
 import { outputFile } from "../config.js"; 
 
@@ -358,27 +358,23 @@ const selectOption = defineTool<typeof selectOptionSchema>({
 });
 
 // --- Tool: Screenshot (Adapted Handle, Example Action) ---
-const screenshotSchema = z
-  .object({
-    raw: z
-      .boolean()
-      .optional()
-      .describe(
-        "Whether to return without compression (PNG). Default is false (JPEG)."
-      ),
-    element: z
-      .string()
-      .optional()
-      .describe("Human-readable element description."),
-    ref: z
-      .string()
-      .optional()
-      .describe("Exact target element reference from the page snapshot."),
-  })
-  .refine((data) => !!data.element === !!data.ref, {
-    message: "Both element and ref must be provided or neither.",
-    path: ["ref", "element"],
-  });
+const screenshotSchema = z.object({
+  raw: z
+    .boolean()
+    .optional()
+    .describe(
+      "Whether to return without compression (PNG). Default is false (JPEG)."
+    ),
+  element: z
+    .string()
+    .optional()
+    .describe("Human-readable element description."),
+  ref: z
+    .string()
+    .optional()
+    .describe("Exact target element reference from the page snapshot.")
+});
+
 type ScreenshotInput = z.infer<typeof screenshotSchema>;
 
 const screenshot = defineTool<typeof screenshotSchema>({
@@ -392,6 +388,10 @@ const screenshot = defineTool<typeof screenshotSchema>({
     context: Context,
     params: ScreenshotInput
   ): Promise<ToolResult> => {
+    if (!!params.element !== !!params.ref) {
+      throw new Error("Both element and ref must be provided or neither.");
+    }
+
     const page = await context.getActivePage();
     if (!page) {
       throw new Error("No active page found for screenshot");
@@ -407,15 +407,12 @@ const screenshot = defineTool<typeof screenshotSchema>({
       `screenshot-${Date.now()}.${fileType}`
     );
 
-    const baseOptions: Omit<
-      Parameters<Page["screenshot"]>[0],
-      "type" | "quality" | "path"
-    > = {
+    const baseOptions: PageScreenshotOptions = {
       scale: "css",
       timeout: 15000, // Kept existing timeout
     };
 
-    let options: Parameters<Page["screenshot"]>[0];
+    let options: PageScreenshotOptions;
 
     if (fileType === "jpeg") {
       options = {

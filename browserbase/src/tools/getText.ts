@@ -6,7 +6,6 @@ import type { ToolActionResult } from '../context.js';
 // --- Tool: Get Text ---
 const GetTextInputSchema = z.object({
     selector: z.string().optional().describe("Optional CSS selector to get text from. If omitted, gets text from the whole body."),
-    sessionId: z.string().optional(), // Keep for schema consistency if needed elsewhere
 });
 type GetTextInput = z.infer<typeof GetTextInputSchema>;
 

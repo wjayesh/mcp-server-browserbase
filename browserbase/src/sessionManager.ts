@@ -324,6 +324,64 @@ export async function getSession(
   return sessionObj;
 }
 
+/**
+ * Get a session by ID without creating new sessions.
+ * This is a read-only operation that never triggers session creation.
+ * Used for operations like closing sessions where we don't want side effects.
+ * @param sessionId The session ID to retrieve
+ * @returns The session if it exists and is valid, null otherwise
+ */
+export function getSessionReadOnly(sessionId: string): BrowserSession | null {
+  // Check if it's the default session
+  if (sessionId === defaultSessionId && defaultBrowserSession) {
+    // Only return if it's actually connected and valid
+    if (defaultBrowserSession.browser.isConnected() && !defaultBrowserSession.page.isClosed()) {
+      return defaultBrowserSession;
+    }
+    return null;
+  }
+
+  // For non-default sessions, check the browsers map
+  const sessionObj = browsers.get(sessionId);
+  if (!sessionObj) {
+    return null;
+  }
+
+  // Validate the session is still active
+  if (!sessionObj.browser.isConnected() || sessionObj.page.isClosed()) {
+    return null;
+  }
+
+  return sessionObj;
+}
+
+/**
+ * Clean up a session by removing it from tracking.
+ * This is called after a browser is closed to ensure proper cleanup.
+ * @param sessionId The session ID to clean up
+ */
+export function cleanupSession(sessionId: string): void {
+  process.stderr.write(
+    `[SessionManager] Cleaning up session: ${sessionId}\n`
+  );
+  
+  // Remove from browsers map
+  browsers.delete(sessionId);
+  
+  // Clear default session reference if this was the default
+  if (sessionId === defaultSessionId && defaultBrowserSession) {
+    defaultBrowserSession = null;
+  }
+  
+  // Reset active session to default if this was the active one
+  if (activeSessionId === sessionId) {
+    process.stderr.write(
+      `[SessionManager] Cleaned up active session ${sessionId}, resetting to default.\n`
+    );
+    setActiveSessionId(defaultSessionId);
+  }
+}
+
 // Function to close all managed browser sessions gracefully
 export async function closeAllSessions(): Promise<void> {
   process.stderr.write(`[SessionManager] Closing all sessions...\n`);

@@ -3,6 +3,7 @@ import type { BrowserSession } from "./sessionManager.js";
 import {
   getSession,
   defaultSessionId,
+  getSessionReadOnly,
 } from "./sessionManager.js";
 import type { Tool, ToolResult } from "./tools/tool.js";
 import type { Config } from "../config.js";
@@ -193,6 +194,34 @@ export class Context {
       }
     }
     return session.browser;
+  }
+
+  /**
+   * Get the active browser without triggering session creation.
+   * This is a read-only operation used when we need to check for an existing browser
+   * without side effects (e.g., during close operations).
+   * @returns The browser if it exists and is connected, null otherwise
+   */
+  public getActiveBrowserReadOnly(): BrowserSession["browser"] | null {
+    const session = getSessionReadOnly(this.currentSessionId);
+    if (!session || !session.browser || !session.browser.isConnected()) {
+      return null;
+    }
+    return session.browser;
+  }
+
+  /**
+   * Get the active page without triggering session creation.
+   * This is a read-only operation used when we need to check for an existing page
+   * without side effects.
+   * @returns The page if it exists and is not closed, null otherwise
+   */
+  public getActivePageReadOnly(): BrowserSession["page"] | null {
+    const session = getSessionReadOnly(this.currentSessionId);
+    if (!session || !session.page || session.page.isClosed()) {
+      return null;
+    }
+    return session.page;
   }
 
   public async waitForTimeout(timeoutMillis: number): Promise<void> {
@@ -507,7 +536,8 @@ export class Context {
 
           // 2. Prepare and add additional textual information (URL, Title, Snapshot)
           const additionalInfoParts: string[] = [];
-          const currentPage = await this.getActivePage();
+          // Use read-only version to avoid creating sessions after close
+          const currentPage = this.getActivePageReadOnly();
 
           if (currentPage) {
             try {

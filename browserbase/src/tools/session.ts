@@ -8,9 +8,9 @@ import {
   createNewBrowserSession,
   defaultSessionId,
   ensureDefaultSessionInternal,
+  cleanupSession,
   type BrowserSession,
 } from "../sessionManager.js";
-
 
 // --- Tool: Create Session ---
 const CreateSessionInputSchema = z.object({
@@ -43,7 +43,8 @@ async function handleCreateSession(
       let targetSessionId: string;
 
       if (params.sessionId) {
-        targetSessionId = params.sessionId;
+        const projectId = config.browserbaseProjectId || '';
+        targetSessionId = `${params.sessionId}_${projectId}`;
         process.stderr.write(
           `[tool.createSession] Attempting to create/assign session with specified ID: ${targetSessionId}`
         );
@@ -140,10 +141,10 @@ async function handleCloseSession(
     let browserClosedSuccessfully = false;
     let browserCloseErrorMessage = "";
 
-    // Step 1: Attempt to get the active browser instance
+    // Step 1: Attempt to get the active browser instance WITHOUT creating a new one
     try {
-      // This call might be associated with 'previousSessionId' (which could be default or specific)
-      browser = await context.getActiveBrowser();
+      // Use read-only version to avoid creating new sessions
+      browser = context.getActiveBrowserReadOnly();
     } catch (error: any) {
       process.stderr.write(
         `[tool.closeSession] Error retrieving active browser (session ID was ${previousSessionId || 'default/unknown'}): ${error.message || String(error)}`
@@ -163,6 +164,9 @@ async function handleCloseSession(
         process.stderr.write(
           `[tool.closeSession] Browser connection for session (was ${previousSessionId}) closed.`
         );
+
+        // Clean up the session from tracking
+        cleanupSession(previousSessionId);
 
         process.stderr.write(
           `[tool.closeSession] View session replay at https://www.browserbase.com/sessions/${previousSessionId}`
@@ -204,7 +208,7 @@ async function handleCloseSession(
     if (browserClosedSuccessfully) { // Browser was present and closed
       let successMessage = `Browserbase session (associated with context ID ${previousSessionId || 'default'}) closed successfully. Context reset to default.`;
       if (previousSessionId && previousSessionId !== defaultSessionId) {
-        successMessage += ` If this was a uniquely named session (${previousSessionId}), view replay (if available) at https://browserbase.com/sessions/${previousSessionId}`;
+        successMessage += ` If this was a uniquely named session (${previousSessionId}), view replay (if available) at https://browserbase.com/sessions`;
       }
       return { content: [{ type: "text", text: successMessage }] };
     }

@@ -28,7 +28,7 @@ async function handleWait(context: Context, params: WaitInput): Promise<ToolResu
 
 // Define tool using handle
 const waitTool: Tool<typeof WaitInputSchema> = {
-    capability: 'core', // Add capability
+    capability: 'core', 
     schema: waitSchema,
     handle: handleWait,
 };
@@ -36,7 +36,7 @@ const waitTool: Tool<typeof WaitInputSchema> = {
 
 // --- Tool: Close ---
 const CloseInputSchema = z.object({
-    random_string: z.string().optional().describe("Dummy parameter") // Keep schema if needed
+    random_string: z.string().optional().describe("Dummy parameter") 
 });
 type CloseInput = z.infer<typeof CloseInputSchema>;
 
