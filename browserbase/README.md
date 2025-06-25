@@ -10,7 +10,11 @@ The Model Context Protocol (MCP) is an open protocol that enables seamless integ
    </a>
 </div>
 
-## How to setup in MCP json
+## How to Setup
+
+### Quickstarts: 
+
+[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.png)](cursor://anysphere.cursor-deeplink/mcp/install?name=browserbase&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyJAYnJvd3NlcmJhc2VocS9tY3AiXSwiZW52Ijp7IkJST1dTRVJCQVNFX0FQSV9LRVkiOiIiLCJCUk9XU0VSQkFTRV9QUk9KRUNUX0lEIjoiIn19)
 
 You can either use our Server hosted on NPM or run it completely locally by cloning this repo. 
 

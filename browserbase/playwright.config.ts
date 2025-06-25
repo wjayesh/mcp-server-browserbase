@@ -1,8 +1,8 @@
-import { defineConfig, devices } from '@playwright/test';
+import { defineConfig } from '@playwright/test';
 
 /**
  * Basic Playwright config - primarily useful if adding actual
- * tests later, might not be strictly needed for the MCP server itself.
+ * tests later
  */
 export default defineConfig({
   testDir: './tests',

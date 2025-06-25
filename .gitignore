@@ -300,3 +300,5 @@ cython_debug/
 #.idea/
 
 
+# Smithery
+/browserbase/.smithery

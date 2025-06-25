@@ -3,16 +3,24 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 
-import { createServer } from './index.js';
+import createServerFunction from './index.js';
 import { ServerList } from './server.js';
-
 import { startHttpTransport, startStdioTransport } from './transport.js';
 
 import { resolveConfig } from './config.js';
 
-// Determine the directory of the current module
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+let __filename: string;
+let __dirname: string;
+
+try {
+  // Try ES modules first
+  __filename = fileURLToPath(import.meta.url);
+  __dirname = path.dirname(__filename);
+} catch {
+  // Fallback for CommonJS or when import.meta is not available
+  __filename = (globalThis as any).__filename || process.cwd() + '/dist/program.js';
+  __dirname = path.dirname(__filename);
+}
 
 // Load package.json using fs
 const packageJSONPath = path.resolve(__dirname, '../package.json');
@@ -35,7 +43,9 @@ program
     .option('--browserHeight <height>', 'Browser height to use for the browser.')
     .action(async options => {
       const config = await resolveConfig(options);
-      const serverList = new ServerList(async() => createServer(config));
+      const serverList = new ServerList(async() => createServerFunction(
+        { config: config as Required<Pick<typeof config, 'browserbaseApiKey' | 'browserbaseProjectId'>> & typeof config }
+      ));
       setupExitWatchdog(serverList);
 
       if (options.port)

@@ -1,7 +1,8 @@
 import dotenv from "dotenv";
 dotenv.config();
 
-import { Config } from "../config.js";
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { z } from 'zod';
 import type { Tool } from "./tools/tool.js";
 
 import navigate from "./tools/navigate.js";
@@ -12,39 +13,62 @@ import session from "./tools/session.js";
 import common from "./tools/common.js";
 import contextTools from "./tools/context.js";
 
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { CallToolRequestSchema, ListResourcesRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
 import { Context } from "./context.js";
+import type { Config } from "./config.js";
 
-// Environment variables configuration
-const requiredEnvVars = {
-  BROWSERBASE_API_KEY: process.env.BROWSERBASE_API_KEY,
-  BROWSERBASE_PROJECT_ID: process.env.BROWSERBASE_PROJECT_ID,
-};
-
-// Validate required environment variables
-Object.entries(requiredEnvVars).forEach(([name, value]) => {
-  if (!value) throw new Error(`${name} environment variable is required`);
+// Configuration schema for Smithery - matches existing Config interface
+export const configSchema = z.object({
+  browserbaseApiKey: z.string().describe("The Browserbase API Key to use"),
+  browserbaseProjectId: z.string().describe("The Browserbase Project ID to use"),
+  proxies: z.boolean().optional().describe("Whether or not to use Browserbase proxies"),
+  advancedStealth: z.boolean().optional().describe("Use advanced stealth mode. Only available to Browserbase Scale Plan users"),
+  context: z.object({
+    contextId: z.string().optional().describe("The ID of the context to use"),
+    persist: z.boolean().optional().describe("Whether or not to persist the context")
+  }).optional(),
+  viewPort: z.object({
+    browserWidth: z.number().optional().describe("The width of the browser"),
+    browserHeight: z.number().optional().describe("The height of the browser")
+  }).optional(),
+  cookies: z.array(z.object({ // Playwright Cookies Type in Zod format
+    name: z.string(),
+    value: z.string(),
+    domain: z.string(),
+    path: z.string().optional(),
+    expires: z.number().optional(),
+    httpOnly: z.boolean().optional(),
+    secure: z.boolean().optional(),
+    sameSite: z.enum(['Strict', 'Lax', 'None']).optional()
+  })).optional().describe("Cookies to inject into the Browserbase context"),
+  server: z.object({
+    port: z.number().optional().describe("The port to listen on for SSE or MCP transport"),
+    host: z.string().optional().describe("The host to bind the server to. Default is localhost. Use 0.0.0.0 to bind to all interfaces")
+  }).optional(),
+  tools: z.object({
+    browserbase_take_screenshot: z.object({
+      omitBase64: z.boolean().optional().describe("Whether to disable base64-encoded image responses")
+    }).optional()
+  }).optional()
 });
 
-export async function createServer(config: Config): Promise<Server> {
-  // Create the server
-  const server = new Server(
-    { name: "mcp-server-browserbase", version: "0.5.1" },
-    {
-      capabilities: {
-        resources: { list: true, read: true },
-        tools: { list: true, call: true },
-        prompts: { list: true, get: true },
-        notifications: { resources: { list_changed: true } },
-      },
-    }
-  ); 
+// Default function for Smithery
+export default function ({ config }: { config: z.infer<typeof configSchema> }) {
+  if (!config.browserbaseApiKey) {
+    throw new Error('browserbaseApiKey is required');
+  }
+  if (!config.browserbaseProjectId) {
+    throw new Error('browserbaseProjectId is required');
+  }
+
+  const server = new McpServer({
+    name: 'Browserbase MCP Server',
+    version: '1.0.6'
+  });
+
+  const internalConfig: Config = config as Config;
 
   // Create the context, passing server instance and config
-  const context = new Context(server, config);
+  const context = new Context(server.server, internalConfig);
 
   const tools: Tool<any>[] = [
     ...common,
@@ -56,87 +80,30 @@ export async function createServer(config: Config): Promise<Server> {
     ...contextTools,
   ];
 
-  const toolsMap = new Map(tools.map(tool => [tool.schema.name, tool]));
-   // --- Setup Request Handlers ---
-
-  server.setRequestHandler(ListResourcesRequestSchema, async () => {
-    return { resources: context.listResources() }; 
-  });
-
-  server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
-    try {
-      const resourceContent = context.readResource(request.params.uri.toString());
-      return { contents: [resourceContent] };
-    } catch (error) {
-      // Keep this error log
-      console.error(`Error reading resource via context: ${error}`);
-      throw error;
-    }
-  });
-
-  server.setRequestHandler(ListToolsRequestSchema, async () => {
-    return {
-      tools: tools.map(tool => {
-        let finalInputSchema;
-        // Check if inputSchema is a Zod schema before converting
-        if (tool.schema.inputSchema instanceof z.Schema) {
-          // Add type assertion to help compiler
-          finalInputSchema = zodToJsonSchema(tool.schema.inputSchema as any);
-        } else if (typeof tool.schema.inputSchema === 'object' && tool.schema.inputSchema !== null) {
-          // Assume it's already a valid JSON schema object
-          finalInputSchema = tool.schema.inputSchema;
-        } else {
-          // Fallback or error handling if schema is neither
-          // Keep this error log
-          console.error(`Warning: Tool '${tool.schema.name}' has an unexpected inputSchema type.`);
-          finalInputSchema = { type: "object" }; // Default to empty object schema
+  // Register each tool with the Smithery server
+  tools.forEach(tool => {
+    if (tool.schema.inputSchema instanceof z.ZodObject) {
+      server.tool(
+        tool.schema.name,
+        tool.schema.description,
+        tool.schema.inputSchema.shape,
+        async (params: z.infer<typeof tool.schema.inputSchema>) => {
+          try {
+            const result = await context.run(tool, params);
+            return result;
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            process.stderr.write(`[Smithery Error] ${new Date().toISOString()} Error running tool ${tool.schema.name}: ${errorMessage}\n`);
+            throw new Error(`Failed to run tool '${tool.schema.name}': ${errorMessage}`);
+          }
         }
-        
-        return {
-          name: tool.schema.name,
-          description: tool.schema.description,
-          inputSchema: finalInputSchema,
-        };
-      }),
-    };
-  });
-
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const logError = (message: string) => {
-      // Ensure error logs definitely go to stderr
-      process.stderr.write(`[server.ts Error] ${new Date().toISOString()} ${message}\\n`);
-    };
-
-    // Use the map built from the passed-in tools
-    const tool = toolsMap.get(request.params.name);
-
-    if (!tool) {
-      // Use the explicit error logger
-      logError(`Tool "${request.params.name}" not found.`);
-      // Return a simplified error object
-      return { content: [{ type: 'text', text: `Tool "${request.params.name}" not found` }], isError: true };
-    }
-
-    try {
-      // Delegate execution to the context
-      const result = await context.run(tool, request.params.arguments ?? {});
-      return result;
-    } catch (error) {
-      // Use the explicit error logger
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logError(`Error running tool ${request.params.name} via context: ${errorMessage}`);
-      logError(`Original error stack (if available): ${error instanceof Error ? error.stack : 'N/A'}`); // Log stack trace
-      // Return a simplified error object
-      return { content: [{ type: 'text', text: `Failed to run tool '${request.params.name}': ${errorMessage}` }], isError: true };
+      );
+    } else {
+      console.warn(
+        `Tool "${tool.schema.name}" has an input schema that is not a ZodObject. Schema type: ${tool.schema.inputSchema.constructor.name}`
+      );
     }
   });
 
-  // Wrap server close to also close context
-  const originalClose = server.close.bind(server);
-  server.close = async () => {
-    await originalClose();
-  };
-  
-  // Return the configured server instance
-  return server;
-} 
+  return server.server;
+}
