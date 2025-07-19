@@ -13,6 +13,8 @@
     "mcp-server-browserbase": "cli.js"
   },
   "files": [
+    "assets",
+    "README.md",
     "dist",
     "cli.js",
     "index.d.ts",
