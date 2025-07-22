@@ -30,7 +30,7 @@ This server provides cloud browser automation capabilities using [Browserbase](h
 Copy and Paste this link in your Browser:
 
 ```text
-cursor://anysphere.cursor-deeplink/mcp/install?name=browserbase&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyJAYnJvd3NlcmJhc2VocS9tY3AiXSwiZW52Ijp7IkJST1dTRVJCQVNFX0FQSV9LRVkiOiIiLCJCUk9XU0VSQkFTRV9QUk9KRUNUX0lEIjoiIn19
+cursor://anysphere.cursor-deeplink/mcp/install?name=browserbase&config=eyJjb21tYW5kIjoibnB4IEBicm93c2VyYmFzZWhxL21jcCIsImVudiI6eyJCUk9XU0VSQkFTRV9BUElfS0VZIjoiIiwiQlJPV1NFUkJBU0VfUFJPSkVDVF9JRCI6IiIsIkdFTUlOSV9BUElfS0VZIjoiIn19
 ```
 
 We currently support 2 transports for our MCP server, STDIO and SHTTP. We recommend you use SHTTP with our remote hosted url to take advantage of the server at full capacity.
@@ -72,6 +72,8 @@ If your client doesn't support SHTTP:
 ## STDIO:
 
 You can either use our Server hosted on NPM or run it completely locally by cloning this repo.
+
+> **❗️ Important:** If you want to use a different model you have to add --modelName to the args and provide that respective key as an arg. More info below.
 
 ### To run on NPM (Recommended)
 
