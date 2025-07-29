@@ -49,6 +49,9 @@ export const createStagehandInstance = async (
           : undefined,
         advancedStealth: config.advancedStealth ?? undefined,
       },
+      userMetadata: {
+        mcp: true,
+      },
     },
     logger: (logLine) => {
       console.error(`Stagehand[${sessionId}]: ${logLine.message}`);
