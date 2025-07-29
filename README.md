@@ -84,7 +84,7 @@ Go into your MCP Config JSON and add the Browserbase Server:
   "mcpServers": {
     "browserbase": {
       "command": "npx",
-      "args": ["@browserbasehq/mcp"],
+      "args": ["@browserbasehq/mcp-server-browserbase"],
       "env": {
         "BROWSERBASE_API_KEY": "",
         "BROWSERBASE_PROJECT_ID": "",
@@ -154,7 +154,7 @@ These flags can be passed directly to the CLI or configured in your MCP configur
 
 ### NOTE:
 
-Currently, these flags can only be used with the local server (npx @browserbasehq/mcp).
+Currently, these flags can only be used with the local server (npx @browserbasehq/mcp-server-browserbase).
 
 ## Configuration Examples
 
@@ -169,7 +169,7 @@ To use proxies, set the --proxies flag in your MCP Config:
   "mcpServers": {
     "browserbase": {
       "command": "npx",
-      "args": ["@browserbasehq/mcp", "--proxies"],
+      "args": ["@browserbasehq/mcp-server-browserbase", "--proxies"],
       "env": {
         "BROWSERBASE_API_KEY": "",
         "BROWSERBASE_PROJECT_ID": "",
@@ -191,7 +191,7 @@ To use advanced stealth, set the --advancedStealth flag in your MCP Config:
   "mcpServers": {
     "browserbase": {
       "command": "npx",
-      "args": ["@browserbasehq/mcp", "--advancedStealth"],
+      "args": ["@browserbasehq/mcp-server-browserbase", "--advancedStealth"],
       "env": {
         "BROWSERBASE_API_KEY": "",
         "BROWSERBASE_PROJECT_ID": "",
@@ -213,7 +213,11 @@ To use contexts, set the --contextId flag in your MCP Config:
   "mcpServers": {
     "browserbase": {
       "command": "npx",
-      "args": ["@browserbasehq/mcp", "--contextId", "<YOUR_CONTEXT_ID>"],
+      "args": [
+        "@browserbasehq/mcp-server-browserbase",
+        "--contextId",
+        "<YOUR_CONTEXT_ID>"
+      ],
       "env": {
         "BROWSERBASE_API_KEY": "",
         "BROWSERBASE_PROJECT_ID": "",
@@ -236,7 +240,7 @@ Here's how to use it for custom browser sizing. We recommend to stick with 16:9 
     "browserbase": {
       "command": "npx",
       "args": [
-        "@browserbasehq/mcp",
+        "@browserbasehq/mcp-server-browserbase",
         "--browserHeight 1080",
         "--browserWidth 1920"
       ],
@@ -264,7 +268,7 @@ Here's how to configure different models:
     "browserbase": {
       "command": "npx",
       "args": [
-        "@browserbasehq/mcp",
+        "@browserbasehq/mcp-server-browserbase",
         "--modelName",
         "anthropic/claude-3-5-sonnet-latest",
         "--modelApiKey",
