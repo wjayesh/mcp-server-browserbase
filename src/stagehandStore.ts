@@ -50,7 +50,7 @@ export const createStagehandInstance = async (
         advancedStealth: config.advancedStealth ?? undefined,
       },
       userMetadata: {
-        mcp: true,
+        mcp: "true",
       },
     },
     logger: (logLine) => {
